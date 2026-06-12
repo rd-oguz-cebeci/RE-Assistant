@@ -37,6 +37,9 @@ pages:
   script:
     - npm ci
     - npm run build
+  # Explizite Pages-Konfiguration (GitLab 17/18): veröffentlicht das public/-Verzeichnis.
+  pages:
+    publish: public
   artifacts:
     paths:
       - public
