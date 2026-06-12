@@ -2,17 +2,15 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// GitLab Pages serviert das Projekt i.d.R. unter /<projektname>/.
-// Über die Umgebungsvariable PAGES_BASE kann der Pfad in der CI gesetzt werden.
-// Lokal (dev/preview) wird '/' verwendet.
-const base = process.env.PAGES_BASE ?? '/'
+// GitHub Pages serviert das Projekt unter /<repo-name>/.
+// In der CI wird GITHUB_ACTIONS gesetzt → Base-Pfad setzen; lokal '/' verwenden.
+const base = process.env.GITHUB_ACTIONS ? '/RE-Assistant/' : '/'
 
 // https://vite.dev/config/
 export default defineConfig({
     base,
     plugins: [vue()],
     // Quell-Static-Assets liegen in static/, der Build-Output in public/
-    // (GitLab Pages veröffentlicht das public/-Verzeichnis direkt).
     publicDir: 'static',
     build: {
         outDir: 'public',
