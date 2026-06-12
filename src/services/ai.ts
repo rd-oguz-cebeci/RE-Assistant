@@ -92,7 +92,9 @@ async function callGemini(
 ): Promise<string> {
     let lastError = ''
     for (const model of GEMINI_MODELS) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+        // Der API-Key wird per Header übertragen (nicht als URL-Query),
+        // damit er nicht in Browser-History, Proxy- oder Server-Logs landet.
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
         const payload = {
             contents: [{ parts: [{ text: prompt }] }],
             systemInstruction: { parts: [{ text: systemInstruction }] },
@@ -101,7 +103,10 @@ async function callGemini(
             try {
                 const response = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': apiKey,
+                    },
                     body: JSON.stringify(payload),
                 })
 

@@ -25,7 +25,8 @@ const iconNames: Record<string, string> = {
       :key="t.id"
       class="glass-panel pointer-events-auto flex items-center gap-3 rounded-xl border-l-4 px-4 py-3 shadow-lg animate-in"
       :class="styles[t.type]"
-      role="status"
+      :role="t.type === 'error' ? 'alert' : 'status'"
+      :aria-live="t.type === 'error' ? 'assertive' : 'polite'"
       @click="dismiss(t.id)"
     >
       <AppIcon :name="iconNames[t.type]" :size="18" />

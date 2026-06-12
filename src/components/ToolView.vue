@@ -170,7 +170,7 @@ function copyResult() {
       </button>
 
       <!-- Ergebnis -->
-      <div v-if="result" class="relative mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/60">
+      <div v-if="result" class="relative mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/60" aria-live="polite" :aria-busy="loading">
         <button
           class="absolute right-3 top-3 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-500 shadow-sm hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
           @click="copyResult"

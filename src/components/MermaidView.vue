@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useToast } from '@/composables/useToast'
+import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ code: string }>()
@@ -28,7 +29,8 @@ async function render() {
   try {
     const mermaid = await getMermaid()
     const { svg } = await mermaid.render(`mermaid-${renderId++}`, props.code)
-    container.value.innerHTML = svg
+    // SVG zusätzlich bereinigen, bevor es per innerHTML eingefügt wird.
+    container.value.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
   } catch (error) {
     errorMsg.value = (error as Error).message
   }
