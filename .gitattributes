@@ -1,0 +1,5 @@
+# Einheitliche Zeilenenden (LF) für alle Textdateien – verhindert CRLF/LF-Diffs im Team.
+* text=auto eol=lf
+
+# Binärdateien nicht anfassen
+*.png binary
