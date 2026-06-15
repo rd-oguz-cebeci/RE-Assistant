@@ -38,8 +38,9 @@ function initialInput(): string {
     case 'goals':
     case 'context':
     case 'stakeholder':
-    case 'persona':
       return store.tempVision
+    case 'persona':
+      return store.tempPersonaText
     case 'extract_req':
       return store.tempTranscript
     case 'formulate':
