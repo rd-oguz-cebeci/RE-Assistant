@@ -28,12 +28,36 @@ interface ProjectState {
     tempValReqText: string
 }
 
+interface DemoStoryFields {
+    tempVision: string
+    tempPersonaText: string
+    tempTranscript: string
+    tempNote: string
+    tempValReqText: string
+}
+
+function supermarktDemoStory(): DemoStoryFields {
+    return {
+        tempVision:
+            'Unsere Mitarbeiter verbringen zu viel Zeit damit, jeden Tag händisch nach abgelaufenen Lebensmitteln zu suchen. Wir brauchen eine App für die mobilen Handscanner. Die App soll anzeigen, wo Ware bald abläuft, damit wir sie direkt reduzieren können. Außerdem sollen Mitarbeiter darüber schnell fehlende Artikel (Out-of-Stock) ans Lager melden. Das Ganze muss an unser bestehendes Warenwirtschafts-System angebunden werden.',
+        tempPersonaText:
+            'Name: Klaus (48), Marktmitarbeiter Frische. Arbeitet unter hohem Zeitdruck, hat wenig IT-Erfahrung und nutzt täglich Handscanner. Schmerzpunkt: Sucht täglich per Hand nach Ablaufdaten.',
+        tempTranscript:
+            'Klaus: "Ich renne jeden Morgen durch die Gänge und lese auf jedem Joghurtbecher das Ablaufdatum ab. Das dauert ewig! Wenn ich einen Scanner hätte, der mir direkt sagt, wo bald etwas abläuft, und mir zeigt, wie stark ich es reduzieren muss (z.B. -30%), wäre mir sehr geholfen. Und wenn ein Fach leer ist, will ich es einfach per Scan dem Lager melden können. Aber im Kühlbereich haben wir oft kein WLAN!"',
+        tempNote:
+            'Scanner-App für MHD-Prüfung und Out-of-Stock-Meldung. Soll auf Zebra TC57 MDE-Geräten laufen. Muss offline funktionieren. Anbindung ans WWS.',
+        tempValReqText:
+            'Das System soll abgelaufene Ware möglichst schnell anzeigen und einfach meldbar machen.',
+    }
+}
+
 function emptyContext(): GlobalContext {
     return { vision: '', personas: '', stakeholders: '', systemkontext: '' }
 }
 
 /** Demo-Plot: Supermarkt-Scanner-App (aus der Ursprungs-App übernommen). */
 function defaultState(): ProjectState {
+    const demo = supermarktDemoStory()
     return {
         activeView: 'home',
         openAccordion: null,
@@ -45,16 +69,11 @@ function defaultState(): ProjectState {
         customPrompts: {},
         globalContext: emptyContext(),
         advisorMessages: [],
-        tempVision:
-            'Unsere Mitarbeiter verbringen zu viel Zeit damit, jeden Tag händisch nach abgelaufenen Lebensmitteln zu suchen. Wir brauchen eine App für die mobilen Handscanner. Die App soll anzeigen, wo Ware bald abläuft, damit wir sie direkt reduzieren können. Außerdem sollen Mitarbeiter darüber schnell fehlende Artikel (Out-of-Stock) ans Lager melden. Das Ganze muss an unser bestehendes Warenwirtschafts-System angebunden werden.',
-        tempPersonaText:
-            'Name: Klaus (48), Marktmitarbeiter Frische. Arbeitet unter hohem Zeitdruck, hat wenig IT-Erfahrung und nutzt täglich Handscanner. Schmerzpunkt: Sucht täglich per Hand nach Ablaufdaten.',
-        tempTranscript:
-            'Klaus: "Ich renne jeden Morgen durch die Gänge und lese auf jedem Joghurtbecher das Ablaufdatum ab. Das dauert ewig! Wenn ich einen Scanner hätte, der mir direkt sagt, wo bald etwas abläuft, und mir zeigt, wie stark ich es reduzieren muss (z.B. -30%), wäre mir sehr geholfen. Und wenn ein Fach leer ist, will ich es einfach per Scan dem Lager melden können. Aber im Kühlbereich haben wir oft kein WLAN!"',
-        tempNote:
-            'Scanner-App für MHD-Prüfung und Out-of-Stock-Meldung. Soll auf Zebra TC57 MDE-Geräten laufen. Muss offline funktionieren. Anbindung ans WWS.',
-        tempValReqText:
-            'Das System soll abgelaufene Ware möglichst schnell anzeigen und einfach meldbar machen.',
+        tempVision: demo.tempVision,
+        tempPersonaText: demo.tempPersonaText,
+        tempTranscript: demo.tempTranscript,
+        tempNote: demo.tempNote,
+        tempValReqText: demo.tempValReqText,
     }
 }
 
@@ -104,6 +123,17 @@ export const useProjectStore = defineStore('project', {
         /** Setzt das gesamte Projekt zurück (außer API-Einstellungen). */
         reset() {
             this.$patch(defaultState())
+            this.save()
+        },
+
+        /** Lädt die Supermarkt-Story explizit in alle Demo-Eingabefelder und speichert den Zustand. */
+        loadSupermarktDemo() {
+            const demo = supermarktDemoStory()
+            this.tempVision = demo.tempVision
+            this.tempPersonaText = demo.tempPersonaText
+            this.tempTranscript = demo.tempTranscript
+            this.tempNote = demo.tempNote
+            this.tempValReqText = demo.tempValReqText
             this.save()
         },
 

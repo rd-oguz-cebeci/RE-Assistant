@@ -2,9 +2,11 @@
 import { computed } from 'vue'
 import { menuStructure, findTool } from '@/config/menu'
 import { useProjectStore } from '@/stores/project'
+import { useToast } from '@/composables/useToast'
 import AppIcon from './AppIcon.vue'
 
 const store = useProjectStore()
+const { show } = useToast()
 
 const favoriteTools = computed(() =>
   store.favorites.map((id) => findTool(id)?.tool).filter((t): t is NonNullable<typeof t> => !!t),
@@ -19,6 +21,12 @@ function openSection(sectionId: string) {
   store.openAccordion = sectionId
   store.activeView = sectionId
 }
+
+function loadSupermarktDemo() {
+  store.loadSupermarktDemo()
+  show('Supermarkt-Story geladen. Demo-Daten wurden übernommen.', 'success')
+  open('elicitation', 'goals')
+}
 </script>
 
 <template>
@@ -32,6 +40,15 @@ function openSection(sectionId: string) {
         KI-gestützte Werkzeuge entlang der vier Säulen des IREB CPRE: Ermittlung, Dokumentation,
         Validierung und Management von Anforderungen.
       </p>
+      <div class="mt-5 flex justify-center">
+        <button
+          class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+          @click="loadSupermarktDemo"
+        >
+          <AppIcon name="flask-conical" :size="16" />
+          Supermarkt-Demo laden
+        </button>
+      </div>
     </div>
 
     <!-- Favoriten -->
