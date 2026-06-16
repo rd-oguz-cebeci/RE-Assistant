@@ -1,4 +1,5 @@
 import { useSettingsStore } from '@/stores/settings'
+import { fetchMcpContext, serializeMcpContext, MCP_PROXY_URL, MCP_URL, MCP_BEARER_TOKEN } from '@/services/mcp'
 
 /** Vom KI-Service ausgelöster Fehler (für gezielte Toast-Meldungen). */
 export class AiError extends Error { }
@@ -14,15 +15,37 @@ function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+let cachedMcpContext: string | null | undefined
+
+async function maybeAttachMcpContext(systemInstruction: string, bearerToken?: string): Promise<string> {
+    const activeToken = bearerToken?.trim() || undefined
+    const shouldFetchMcp = MCP_PROXY_URL || MCP_URL || MCP_BEARER_TOKEN || activeToken
+    if (!shouldFetchMcp) return systemInstruction
+
+    if (cachedMcpContext === undefined) {
+        try {
+            const contextData = await fetchMcpContext(undefined, activeToken)
+            const serialized = serializeMcpContext(contextData).trim()
+            cachedMcpContext = serialized || null
+        } catch (error) {
+            cachedMcpContext = null
+        }
+    }
+
+    if (!cachedMcpContext) return systemInstruction
+    return `MCP-Kontext:\n${cachedMcpContext}\n\n${systemInstruction}`
+}
+
 /**
  * Ruft den konfigurierten KI-Anbieter auf und liefert den Antworttext.
  * Wirft {@link AiError} mit aussagekräftiger Meldung bei Fehlern.
  *
- * Hinweis: Bei statischem Hosting (GitLab Pages) gibt es keinen Backend-Proxy.
- * Der API-Key wird – wie in der Ursprungs-App – pro Nutzer lokal gehalten.
+ * Wenn `VITE_MCP_PROXY_URL` gesetzt ist, wird MCP-Kontext vor dem System-Prompt
+ * eingebunden, um den KI-Aufruf mit zusätzlichen Kontextinformationen zu versorgen.
  */
 export async function callAi(prompt: string, systemInstruction = ''): Promise<string> {
     const settings = useSettingsStore()
+    const mergedInstruction = await maybeAttachMcpContext(systemInstruction, settings.mcpBearerToken)
     const apiKey = settings.apiKey.trim()
 
     if (!apiKey) {
@@ -30,9 +53,9 @@ export async function callAi(prompt: string, systemInstruction = ''): Promise<st
     }
 
     if (settings.provider === 'anthropic') {
-        return callAnthropic(prompt, systemInstruction, apiKey)
+        return callAnthropic(prompt, mergedInstruction, apiKey)
     }
-    return callGemini(prompt, systemInstruction, apiKey)
+    return callGemini(prompt, mergedInstruction, apiKey)
 }
 
 async function callAnthropic(

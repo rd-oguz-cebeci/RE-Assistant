@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables/useToast'
 import type { AiProvider } from '@/types'
@@ -11,8 +11,10 @@ const emit = defineEmits<{ close: [] }>()
 const settings = useSettingsStore()
 const { show } = useToast()
 
-const provider = ref<AiProvider>(settings.provider)
-const apiKey = ref(settings.apiKey)
+type ConfigType = AiProvider | 'mcp'
+
+const configType = ref<ConfigType>(settings.provider)
+const credential = ref('')
 const showKey = ref(false)
 
 const dialog = ref<HTMLElement | null>(null)
@@ -23,10 +25,9 @@ watch(
   () => props.open,
   async (open) => {
     if (open) {
-      provider.value = settings.provider
-      apiKey.value = settings.apiKey
+      configType.value = settings.provider
+      credential.value = settings.apiKey
       showKey.value = false
-      // Fokus-Auslöser merken, um ihn nach dem Schließen wiederherzustellen.
       lastFocused = document.activeElement as HTMLElement | null
       await nextTick()
       firstField.value?.focus()
@@ -37,11 +38,45 @@ watch(
   },
 )
 
+watch(
+  () => configType.value,
+  (newType) => {
+    if (newType === 'mcp') {
+      credential.value = settings.mcpBearerToken
+    } else {
+      credential.value = settings.apiKey
+    }
+    showKey.value = false
+  },
+)
+
+const placeholder = computed(() => {
+  switch (configType.value) {
+    case 'mcp':
+      return 'MCP Bearer Token'
+    case 'anthropic':
+      return 'sk-ant-...'
+    case 'gemini':
+    default:
+      return 'AIza...'
+  }
+})
+
+const label = computed(() => {
+  return configType.value === 'mcp' ? 'Bearer Token' : 'API Key'
+})
+
+const description = computed(() => {
+  if (configType.value === 'mcp') {
+    return 'Geben Sie Ihren MCP Bearer Token ein. Das Token wird nur lokal im Browser gespeichert.'
+  }
+  return 'Geben Sie Ihren API Key ein. Der Schlüssel wird nur lokal im Browser gespeichert.'
+})
+
 function close() {
   emit('close')
 }
 
-/** Tab-Fokus innerhalb des Dialogs halten (Focus-Trap) und Escape schließen. */
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
@@ -71,17 +106,22 @@ onBeforeUnmount(() => {
   if (lastFocused) lastFocused.focus()
 })
 
-const placeholder = () =>
-  provider.value === 'anthropic' ? 'sk-ant-...' : 'AIza...'
-
 function save() {
-  const key = apiKey.value.trim()
-  if (!key) {
-    show('Bitte einen API-Key eingeben.', 'error')
+  const cred = credential.value.trim()
+
+  if (!cred) {
+    show(`Bitte einen Wert für ${label.value} eingeben.`, 'error')
     return
   }
-  settings.setApiCredentials(provider.value, key)
-  show('KI-Anbindung gespeichert.', 'success')
+
+  if (configType.value === 'mcp') {
+    settings.setMcpBearerToken(cred)
+    show('MCP Bearer Token gespeichert.', 'success')
+  } else {
+    settings.setApiCredentials(configType.value as AiProvider, cred)
+    show('API-Anbindung gespeichert.', 'success')
+  }
+
   close()
 }
 </script>
@@ -106,39 +146,37 @@ function save() {
       >
         <AppIcon name="key" :size="20" class="text-blue-600" /> KI-Anbindung
       </h3>
-      <p class="mb-4 text-sm text-slate-600 dark:text-slate-300">
-        Wählen Sie den KI-Anbieter und geben Sie Ihren API Key ein. Der Schlüssel wird nur lokal
-        im Browser gespeichert.
-      </p>
+      <p class="mb-6 text-sm text-slate-600 dark:text-slate-300">{{ description }}</p>
 
       <label
-        for="api-provider"
+        for="config-type"
         class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500"
       >
-        Anbieter
+        Anbieter / Kontext
       </label>
       <select
-        id="api-provider"
+        id="config-type"
         ref="firstField"
-        v-model="provider"
-        class="mb-4 w-full rounded-xl border border-slate-300 bg-white p-3.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+        v-model="configType"
+        class="mb-6 w-full rounded-xl border border-slate-300 bg-white p-3.5 text-sm dark:border-slate-600 dark:bg-slate-800"
       >
         <option value="gemini">Google Gemini (gemini-1.5-flash)</option>
         <option value="anthropic">Anthropic Claude (claude-sonnet-4)</option>
+        <option value="mcp">MCP Atlassian</option>
       </select>
 
       <label
-        for="api-key"
+        :for="`credential-${configType}`"
         class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500"
       >
-        API Key
+        {{ label }}
       </label>
-      <div class="relative mb-3">
+      <div class="relative mb-6">
         <input
-          id="api-key"
-          v-model="apiKey"
+          :id="`credential-${configType}`"
+          v-model="credential"
           :type="showKey ? 'text' : 'password'"
-          :placeholder="placeholder()"
+          :placeholder="placeholder"
           autocomplete="off"
           spellcheck="false"
           class="w-full rounded-xl border border-slate-300 bg-white p-3.5 pr-12 text-sm dark:border-slate-600 dark:bg-slate-800"
@@ -147,7 +185,7 @@ function save() {
         <button
           type="button"
           class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-          :aria-label="showKey ? 'API Key verbergen' : 'API Key anzeigen'"
+          :aria-label="showKey ? 'Verbergen' : 'Anzeigen'"
           @click="showKey = !showKey"
         >
           <AppIcon :name="showKey ? 'eye-off' : 'eye'" :size="16" />
@@ -159,7 +197,7 @@ function save() {
       >
         <AppIcon name="shield-alert" :size="16" class="mt-0.5 shrink-0" />
         <span>
-          Der Schlüssel wird unverschlüsselt im <strong>localStorage</strong> dieses Browsers
+          Das {{ label }} wird unverschlüsselt im <strong>localStorage</strong> dieses Browsers
           abgelegt. Nutzen Sie die App nur auf einem vertrauenswürdigen Gerät und verwenden Sie
           einen Key mit eng begrenzten Rechten.
         </span>
