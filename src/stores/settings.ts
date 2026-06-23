@@ -3,11 +3,13 @@ import type { AiProvider } from '@/types'
 
 const KEY_API = 'gemini_api_key'
 const KEY_PROVIDER = 'api_provider'
+const KEY_MCP_BEARER_TOKEN = 'mcp_bearer_token'
 const KEY_THEME = 'theme'
 
 interface SettingsState {
     apiKey: string
     provider: AiProvider
+    mcpBearerToken: string
     isDark: boolean
 }
 
@@ -21,6 +23,7 @@ export const useSettingsStore = defineStore('settings', {
     state: (): SettingsState => ({
         apiKey: localStorage.getItem(KEY_API) ?? '',
         provider: (localStorage.getItem(KEY_PROVIDER) as AiProvider) ?? 'gemini',
+        mcpBearerToken: localStorage.getItem(KEY_MCP_BEARER_TOKEN) ?? '',
         isDark: detectInitialTheme(),
     }),
 
@@ -34,6 +37,15 @@ export const useSettingsStore = defineStore('settings', {
             this.apiKey = apiKey
             localStorage.setItem(KEY_PROVIDER, provider)
             localStorage.setItem(KEY_API, apiKey)
+        },
+
+        setMcpBearerToken(token: string) {
+            this.mcpBearerToken = token
+            if (token) {
+                localStorage.setItem(KEY_MCP_BEARER_TOKEN, token)
+            } else {
+                localStorage.removeItem(KEY_MCP_BEARER_TOKEN)
+            }
         },
 
         applyTheme() {
