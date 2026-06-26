@@ -55,10 +55,10 @@ const placeholder = computed(() => {
     case 'mcp':
       return 'MCP Bearer Token'
     case 'anthropic':
-      return 'sk-ant-...'
+      return 'sk-ant-api03-...'
     case 'gemini':
     default:
-      return 'AIza...'
+      return 'AIzaSy...'
   }
 })
 
@@ -71,6 +71,16 @@ const description = computed(() => {
     return 'Geben Sie Ihren MCP Bearer Token ein. Das Token wird nur lokal im Browser gespeichert.'
   }
   return 'Geben Sie Ihren API Key ein. Der Schlüssel wird nur lokal im Browser gespeichert.'
+})
+
+const hint = computed(() => {
+  if (configType.value === 'mcp') {
+    return ''
+  }
+  if (configType.value === 'anthropic') {
+    return 'Auf console.anthropic.com erstellen'
+  }
+  return 'Kostenlos auf ai.google.dev erstellen'
 })
 
 function close() {
@@ -110,7 +120,14 @@ function save() {
   const cred = credential.value.trim()
 
   if (!cred) {
-    show(`Bitte einen Wert für ${label.value} eingeben.`, 'error')
+    if (configType.value === 'mcp') {
+      show(`Bitte einen Wert für ${label.value} eingeben.`, 'error')
+      return
+    }
+    // Für Gemini/Anthropic: leere Eingabe erlaubt = Key löschen
+    settings.setApiCredentials(configType.value as AiProvider, '')
+    show('API Key entfernt. Demo-Modus aktiv.', 'success')
+    close()
     return
   }
 
@@ -191,6 +208,8 @@ function save() {
           <AppIcon :name="showKey ? 'eye-off' : 'eye'" :size="16" />
         </button>
       </div>
+
+      <p v-if="hint" class="mb-6 text-[11px] text-slate-400 dark:text-slate-500">{{ hint }}</p>
 
       <p
         class="mb-6 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-[12px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
