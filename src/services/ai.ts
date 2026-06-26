@@ -27,7 +27,7 @@ async function maybeAttachMcpContext(systemInstruction: string, bearerToken?: st
             const contextData = await fetchMcpContext(undefined, activeToken)
             const serialized = serializeMcpContext(contextData).trim()
             cachedMcpContext = serialized || null
-        } catch (error) {
+        } catch {
             cachedMcpContext = null
         }
     }
