@@ -41,6 +41,16 @@ const title = computed(() => viewTitles[store.activeView] ?? 'RE AI Assistant')
     </button>
 
     <button
+      v-if="!settings.hasApiKey"
+      class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+      :title="'Demo-Modus: Supermarkt-Story ist vorausgefüllt'"
+    >
+      <AppIcon name="zap-off" :size="16" />
+      <span class="hidden sm:inline">Demo-Modus (Supermarkt-Story)</span>
+      <span class="sm:hidden">Demo</span>
+    </button>
+
+    <button
       class="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       aria-label="Theme wechseln"
       @click="settings.toggleTheme()"

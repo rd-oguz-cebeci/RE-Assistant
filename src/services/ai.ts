@@ -5,9 +5,8 @@ import { fetchMcpContext, serializeMcpContext, MCP_PROXY_URL, MCP_URL, MCP_BEARE
 export class AiError extends Error { }
 
 const GEMINI_MODELS = [
-    'gemini-1.5-flash-latest',
-    'gemini-1.5-pro-latest',
-    'gemini-1.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-pro',
 ]
 const ANTHROPIC_MODELS = ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022']
 
