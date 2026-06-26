@@ -36,7 +36,11 @@ export const useSettingsStore = defineStore('settings', {
             this.provider = provider
             this.apiKey = apiKey
             localStorage.setItem(KEY_PROVIDER, provider)
-            localStorage.setItem(KEY_API, apiKey)
+            if (apiKey) {
+                localStorage.setItem(KEY_API, apiKey)
+            } else {
+                localStorage.removeItem(KEY_API)
+            }
         },
 
         setMcpBearerToken(token: string) {
