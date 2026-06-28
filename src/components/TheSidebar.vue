@@ -64,6 +64,18 @@ function goHome() {
         <AppIcon name="home" :size="18" /> Startseite
       </button>
 
+      <button
+        class="mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors"
+        :class="
+          store.activeView === 'advisor'
+            ? 'bg-blue-600 text-white'
+            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+        "
+        @click="store.setView('advisor')"
+      >
+        <AppIcon name="message-square" :size="18" /> IREB Berater
+      </button>
+
       <div v-for="section in menuStructure" :key="section.id" class="mb-1">
         <button
           class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"

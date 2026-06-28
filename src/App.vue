@@ -5,6 +5,7 @@ import { findTool, menuStructure } from '@/config/menu'
 import TheSidebar from '@/components/TheSidebar.vue'
 import TheHeader from '@/components/TheHeader.vue'
 import HomeView from '@/components/HomeView.vue'
+import AdvisorView from '@/components/AdvisorView.vue'
 import ToolView from '@/components/ToolView.vue'
 import ApiModal from '@/components/ApiModal.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
@@ -37,6 +38,7 @@ const activeSection = computed(() => menuStructure.find((section) => section.id 
 
       <main class="custom-scrollbar flex-1 overflow-y-auto p-4 sm:p-8">
         <HomeView v-if="isHome" />
+        <AdvisorView v-else-if="store.activeView === 'advisor'" />
         <ToolView v-else-if="activeTool" :key="store.activeView" :tool-id="store.activeView" />
         <div
           v-else-if="activeSection"
