@@ -9,6 +9,7 @@ import { renderMarkdown } from '@/services/markdown'
 import { callAi, AiError } from '@/services/ai'
 import { getDemoResponse } from '@/services/demo'
 import { getRecommendations } from '@/services/recommendations'
+import { downloadProjectExport, serializeProjectExport } from '@/services/export'
 import AppIcon from './AppIcon.vue'
 import PromptEditor from './PromptEditor.vue'
 
@@ -32,9 +33,11 @@ const result = ref('')
 const loading = ref(false)
 
 const isModeling = computed(() => props.toolId === 'modeling')
+const isExportTool = computed(() => props.toolId === 'export_context')
 const isFavorite = computed(() => favorites.value.includes(props.toolId))
 const isDemoMode = computed(() => store.demoModeLoaded)
 const recommendations = computed(() => getRecommendations(props.toolId, selectedVariant.value))
+const exportPreview = computed(() => serializeProjectExport())
 
 function firstRequirementText(): string {
   return store.requirements[0]?.text ?? store.tempValReqText
@@ -174,6 +177,13 @@ function initialInput(): string {
 }
 
 function resetForTool() {
+  if (isExportTool.value) {
+    input.value = ''
+    result.value = exportPreview.value
+    selectedVariant.value = undefined
+    return
+  }
+
   input.value = initialInputForVariant()
   result.value = ''
   selectedVariant.value = variantKeys.value[0]
@@ -186,6 +196,13 @@ watch(selectedVariant, () => {
 })
 
 async function run() {
+  if (isExportTool.value) {
+    result.value = exportPreview.value
+    downloadProjectExport()
+    show('re-context.md exportiert.', 'success')
+    return
+  }
+
   if (!input.value.trim()) {
     show('Bitte zuerst eine Eingabe machen.', 'error')
     return
@@ -222,6 +239,11 @@ const mermaidCode = computed(() =>
 function copyResult() {
   navigator.clipboard.writeText(result.value)
   show('Ergebnis kopiert!', 'success')
+}
+
+function copyExport() {
+  navigator.clipboard.writeText(exportPreview.value)
+  show('Export-Markdown kopiert!', 'success')
 }
 </script>
 
@@ -278,29 +300,55 @@ function copyResult() {
         </select>
       </div>
 
-      <textarea
-        v-model="input"
-        class="custom-scrollbar mb-4 h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/80"
-        placeholder="Ihre Eingabe …"
-      />
+      <template v-if="isExportTool">
+        <p class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">
+          Dieser Export bündelt Vision, Systemkontext, Stakeholder, Personas, Glossar, Anforderungen und einen maschinenlesbaren JSON-Snapshot in einer Datei für Claude Code oder ähnliche KI-Werkzeuge.
+        </p>
 
-      <PromptEditor :tool-id="toolId" :sub-key="selectedVariant" />
+        <div class="mb-4 flex flex-wrap gap-3">
+          <button
+            class="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-emerald-700"
+            @click="run"
+          >
+            <AppIcon name="download" :size="18" />
+            Markdown exportieren
+          </button>
 
-      <p
-        v-if="isDemoMode"
-        class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
-      >
-        Demo-Modus aktiv: Dieser Lauf verwendet hinterlegte Beispielantworten statt eines API-Aufrufs.
-      </p>
+          <button
+            class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            @click="copyExport"
+          >
+            <AppIcon name="copy" :size="18" />
+            Markdown kopieren
+          </button>
+        </div>
+      </template>
 
-      <button
-        class="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-60"
-        :disabled="loading"
-        @click="run"
-      >
-        <AppIcon :name="loading ? 'loader-circle' : 'sparkles'" :size="18" :class="{ 'animate-spin': loading }" />
-        {{ loading ? (isDemoMode ? 'Demo wird geladen …' : 'KI arbeitet …') : 'Mit KI ausführen' }}
-      </button>
+      <template v-else>
+        <textarea
+          v-model="input"
+          class="custom-scrollbar mb-4 h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/80"
+          placeholder="Ihre Eingabe …"
+        />
+
+        <PromptEditor :tool-id="toolId" :sub-key="selectedVariant" />
+
+        <p
+          v-if="isDemoMode"
+          class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+        >
+          Demo-Modus aktiv: Dieser Lauf verwendet hinterlegte Beispielantworten statt eines API-Aufrufs.
+        </p>
+
+        <button
+          class="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-60"
+          :disabled="loading"
+          @click="run"
+        >
+          <AppIcon :name="loading ? 'loader-circle' : 'sparkles'" :size="18" :class="{ 'animate-spin': loading }" />
+          {{ loading ? (isDemoMode ? 'Demo wird geladen …' : 'KI arbeitet …') : 'Mit KI ausführen' }}
+        </button>
+      </template>
 
       <!-- Ergebnis -->
       <div v-if="result" class="relative mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/60" aria-live="polite" :aria-busy="loading">
