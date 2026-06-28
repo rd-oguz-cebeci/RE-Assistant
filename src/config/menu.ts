@@ -361,6 +361,15 @@ export const menuStructure: MenuSection[] = [
         why: 'Requirements Management sichert die Traceability (Verfolgbarkeit), steuert Versionen und koordiniert Änderungen (Change Requests) systematisch über den gesamten Projektlebenszyklus.',
         children: [
             {
+                id: 'export_context',
+                category: 'Export',
+                icon: 'download',
+                label: 'Export für Claude Code',
+                desc: 'Exportiert den aktuellen RE-Kontext als Markdown-Datei für Claude Code oder ähnliche KI-Werkzeuge.',
+                instruction: 'Prüfen Sie die Vorschau und exportieren Sie anschließend den gesamten Projektkontext als Markdown-Datei.',
+                why: 'Ein strukturierter Export macht den erarbeiteten RE-Kontext außerhalb des Assistenten wiederverwendbar. So lassen sich Vision, Systemkontext, Glossar und Backlog in externe KI-Workflows übernehmen, ohne Informationen manuell neu zusammenzustellen.',
+            },
+            {
                 id: 'backlog',
                 category: 'Backlog',
                 icon: 'list-todo',

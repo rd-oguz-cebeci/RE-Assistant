@@ -114,7 +114,12 @@ const RECOMMENDATIONS: Record<string, ToolRecommendation[]> = {
         { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
         { toolId: 'dor', label: 'Definition of Ready prüfen', icon: 'list-checks', pillar: 'validation' },
     ],
+    export_context: [
+        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'traceability', label: 'Traceability Matrix generieren', icon: 'link', pillar: 'management' },
+    ],
     backlog: [
+        { toolId: 'export_context', label: 'Export für Claude Code erstellen', icon: 'download', pillar: 'management' },
         { toolId: 'traceability', label: 'Traceability Matrix generieren', icon: 'link', pillar: 'management' },
         { toolId: 'impact', label: 'Change Impact Analyse', icon: 'git-pull-request', pillar: 'management' },
     ],
@@ -127,9 +132,12 @@ const RECOMMENDATIONS: Record<string, ToolRecommendation[]> = {
         { toolId: 'translate', label: 'Mgmt.-Übersetzer öffnen', icon: 'megaphone', pillar: 'management' },
     ],
     poker: [
+        { toolId: 'export_context', label: 'Export für Claude Code erstellen', icon: 'download', pillar: 'management' },
         { toolId: 'translate', label: 'Mgmt.-Übersetzer öffnen', icon: 'megaphone', pillar: 'management' },
     ],
-    translate: [],
+    translate: [
+        { toolId: 'export_context', label: 'Export für Claude Code erstellen', icon: 'download', pillar: 'management' },
+    ],
 }
 
 export function getRecommendations(toolId: string, subKey?: string): ToolRecommendation[] {
