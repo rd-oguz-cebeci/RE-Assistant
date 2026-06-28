@@ -77,8 +77,14 @@ export const menuStructure: MenuSection[] = [
                 desc: 'Leistungsfaktoren: W-Fragen entwerfen & KI-Interview simulieren.',
                 instruction: 'Generieren Sie Leitfragen und simulieren Sie anschließend das Interview.',
                 why: 'Interviews eignen sich exzellent für Leistungsfaktoren. Offene, kontextfreie W-Fragen verhindern eine Voreingenommenheit (Bias) des Requirements Engineers.',
+                promptPatterns: {
+                    fragen:
+                        'System-Prompt:\nRolle: RE. Aufgabe: Erstelle exakt 4 offene W-Fragen für ein Interview mit dieser Persona. Keine Ja/Nein-Fragen.\n\nUser-Prompt:\nProjektkontext:\n[Kontext]\n\nPersona:\n[Persona]',
+                    simulation:
+                        'System-Prompt:\nDu bist ein Rollenspieler im Requirements Engineering. Übernimm exakt die Rolle der folgenden Persona:\n\n[Persona]\n\nAntworte absolut authentisch, detailliert und aus der Ich-Perspektive auf Fragen im Kontext dieses Projekts:\n[Kontext]\n\nUser-Prompt:\nHier sind die Leitfragen des Requirements Engineers. Bitte beantworte sie einzeln und ehrlich aus deiner Sichtweise als Stakeholder:\n\n[Interview-Leitfaden]',
+                },
                 promptPattern:
-                    'System-Prompt (Fragen):\nRolle: RE. Aufgabe: Erstelle exakt 4 offene W-Fragen für ein Interview mit dieser Persona. Keine Ja/Nein-Fragen.\n\nSystem-Prompt (Simulation):\nDu bist ein Rollenspieler im Requirements Engineering. Übernimm exakt die Rolle der Persona. Antworte absolut authentisch, detailliert und aus der Ich-Perspektive.',
+                    'System-Prompt:\nRolle: RE. Aufgabe: Erstelle exakt 4 offene W-Fragen für ein Interview mit dieser Persona. Keine Ja/Nein-Fragen.\n\nUser-Prompt:\nProjektkontext:\n[Kontext]\n\nPersona:\n[Persona]',
             },
             {
                 id: 'questionnaire',
@@ -406,8 +412,14 @@ export const menuStructure: MenuSection[] = [
                 desc: 'Anforderungen in Business-Pitch oder Release Notes wandeln.',
                 instruction: 'Wählen Sie das Zielformat und die Anforderung.',
                 why: 'Stakeholder-gerechte Kommunikation ist zentral im PM. Der Sponsor braucht den Business Value (ROI), der Entwickler die technische Akzeptanzbedingung.',
+                promptPatterns: {
+                    sponsor:
+                        'System-Prompt:\nÜbersetze die formale Anforderung in einen Sponsor-Pitch mit Business Value, Nutzen und plausibler Wirkung.\n\nUser-Prompt:\nAnforderung: [Anforderung]',
+                    release:
+                        'System-Prompt:\nÜbersetze die formale Anforderung in verständliche Release Notes für Mitarbeitende oder Endnutzer.\n\nUser-Prompt:\nAnforderung: [Anforderung]',
+                },
                 promptPattern:
-                    'System-Prompt:\nÜbersetze die formale Anforderung in das gewählte Format [Sponsor-Pitch oder Release Notes].\n\nUser-Prompt:\nAnforderung: [Gewählte Anforderung]',
+                    'System-Prompt:\nÜbersetze die formale Anforderung in einen Sponsor-Pitch mit Business Value, Nutzen und plausibler Wirkung.\n\nUser-Prompt:\nAnforderung: [Anforderung]',
             },
         ],
     },

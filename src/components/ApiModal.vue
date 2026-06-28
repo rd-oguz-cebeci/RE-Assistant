@@ -126,7 +126,7 @@ function save() {
     }
     // Für Gemini/Anthropic: leere Eingabe erlaubt = Key löschen
     settings.setApiCredentials(configType.value as AiProvider, '')
-    show('API Key entfernt. Demo-Modus aktiv.', 'success')
+    show('API Key entfernt. Demo-Modus kann jetzt ohne API geladen werden.', 'success')
     close()
     return
   }

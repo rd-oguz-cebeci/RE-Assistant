@@ -12,6 +12,7 @@ interface ProjectState {
     activeView: string
     openAccordion: string | null
     activeTab: string | null
+    demoModeLoaded: boolean
     favorites: string[]
     requirements: Requirement[]
     glossary: GlossaryEntry[]
@@ -20,7 +21,7 @@ interface ProjectState {
     customPrompts: Record<string, { system: string; user: string }>
     globalContext: GlobalContext
     advisorMessages: AdvisorMessage[]
-    // Übergreifende Zwischenwerte (überleben Reload) – Demo-Daten vorbefüllt
+    // Übergreifende Zwischenwerte (überleben Reload)
     tempVision: string
     tempPersonaText: string
     tempTranscript: string
@@ -55,13 +56,65 @@ function emptyContext(): GlobalContext {
     return { vision: '', personas: '', stakeholders: '', systemkontext: '' }
 }
 
-/** Demo-Plot: Supermarkt-Scanner-App (aus der Ursprungs-App übernommen). */
-function defaultState(): ProjectState {
+function emptyDraftFields(): DemoStoryFields {
+    return {
+        tempVision: '',
+        tempPersonaText: '',
+        tempTranscript: '',
+        tempNote: '',
+        tempValReqText: '',
+    }
+}
+
+function firstRequirementFromResult(result: string): string {
+    const parts = result
+        .split(/\n\s*---\s*\n/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+    return parts[0] ?? result.trim()
+}
+
+function splitRequirementBlocks(result: string): string[] {
+    return result
+        .split(/\n\s*---\s*\n/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+}
+
+function parseGlossaryTable(result: string): GlossaryEntry[] {
+    return result
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('|') && !line.startsWith('|---'))
+        .slice(1)
+        .map((line) => line.split('|').map((cell) => cell.trim()).filter(Boolean))
+        .filter((cells) => cells.length >= 2)
+        .map(([term, definition]) => ({
+            term: term.replace(/\*\*/g, ''),
+            definition,
+        }))
+}
+
+function isLegacyAutoDemoState(state: Partial<ProjectState>): boolean {
     const demo = supermarktDemoStory()
+    return (
+        state.demoModeLoaded === undefined &&
+        state.tempVision === demo.tempVision &&
+        state.tempPersonaText === demo.tempPersonaText &&
+        state.tempTranscript === demo.tempTranscript &&
+        state.tempNote === demo.tempNote &&
+        state.tempValReqText === demo.tempValReqText
+    )
+}
+
+/** Standardzustand ohne Vorbefüllung; Demo wird nur explizit geladen. */
+function defaultState(): ProjectState {
+    const emptyDrafts = emptyDraftFields()
     return {
         activeView: 'home',
         openAccordion: null,
         activeTab: null,
+        demoModeLoaded: false,
         favorites: [],
         requirements: [],
         glossary: [],
@@ -69,11 +122,11 @@ function defaultState(): ProjectState {
         customPrompts: {},
         globalContext: emptyContext(),
         advisorMessages: [],
-        tempVision: demo.tempVision,
-        tempPersonaText: demo.tempPersonaText,
-        tempTranscript: demo.tempTranscript,
-        tempNote: demo.tempNote,
-        tempValReqText: demo.tempValReqText,
+        tempVision: emptyDrafts.tempVision,
+        tempPersonaText: emptyDrafts.tempPersonaText,
+        tempTranscript: emptyDrafts.tempTranscript,
+        tempNote: emptyDrafts.tempNote,
+        tempValReqText: emptyDrafts.tempValReqText,
     }
 }
 
@@ -105,6 +158,19 @@ export const useProjectStore = defineStore('project', {
                 this.customPrompts = p.customPrompts ?? {}
                 this.globalContext = p.globalContext ?? emptyContext()
                 this.advisorMessages = p.advisorMessages ?? []
+                this.demoModeLoaded = p.demoModeLoaded ?? false
+
+                if (isLegacyAutoDemoState(p)) {
+                    const emptyDrafts = emptyDraftFields()
+                    this.tempVision = emptyDrafts.tempVision
+                    this.tempPersonaText = emptyDrafts.tempPersonaText
+                    this.tempTranscript = emptyDrafts.tempTranscript
+                    this.tempNote = emptyDrafts.tempNote
+                    this.tempValReqText = emptyDrafts.tempValReqText
+                    this.save()
+                    return
+                }
+
                 if (p.tempVision !== undefined) this.tempVision = p.tempVision
                 if (p.tempPersonaText !== undefined) this.tempPersonaText = p.tempPersonaText
                 if (p.tempTranscript !== undefined) this.tempTranscript = p.tempTranscript
@@ -129,11 +195,78 @@ export const useProjectStore = defineStore('project', {
         /** Lädt die Supermarkt-Story explizit in alle Demo-Eingabefelder und speichert den Zustand. */
         loadSupermarktDemo() {
             const demo = supermarktDemoStory()
+            this.demoModeLoaded = true
             this.tempVision = demo.tempVision
             this.tempPersonaText = demo.tempPersonaText
             this.tempTranscript = demo.tempTranscript
             this.tempNote = demo.tempNote
             this.tempValReqText = demo.tempValReqText
+            this.save()
+        },
+
+        applyToolResult(toolId: string, input: string, result: string, subKey?: string) {
+            switch (toolId) {
+                case 'goals':
+                case 'context':
+                case 'stakeholder':
+                    this.tempVision = input
+                    this.globalContext.vision = input
+                    break
+                default:
+                    break
+            }
+
+            switch (toolId) {
+                case 'context':
+                    this.globalContext.systemkontext = result
+                    break
+                case 'stakeholder':
+                    this.globalContext.stakeholders = result
+                    break
+                case 'persona':
+                    this.globalContext.personas = result
+                    this.tempPersonaText = result
+                    break
+                case 'prep':
+                    if (subKey === 'simulation') {
+                        this.tempTranscript = result
+                    }
+                    break
+                case 'extract_req':
+                    this.tempTranscript = input
+                    this.tempNote = result
+                    break
+                case 'formulate':
+                    this.tempNote = input
+                    this.tempValReqText = firstRequirementFromResult(result)
+                    for (const requirementText of splitRequirementBlocks(result)) {
+                        if (!this.requirements.some((req) => req.text === requirementText)) {
+                            this.requirements.push({ id: this.nextReqId, text: requirementText })
+                        }
+                    }
+                    break
+                case 'glossary_extract': {
+                    const glossaryEntries = parseGlossaryTable(result)
+                    if (glossaryEntries.length) {
+                        this.glossary = glossaryEntries
+                    }
+                    break
+                }
+                case 'smells':
+                case 'tests':
+                case 'perspective':
+                case 'conflict':
+                case 'devil':
+                case 'compliance':
+                case 'dor':
+                case 'bva':
+                case 'nfr':
+                    this.tempValReqText = input
+                    break
+                default:
+                    break
+            }
+
             this.save()
         },
 

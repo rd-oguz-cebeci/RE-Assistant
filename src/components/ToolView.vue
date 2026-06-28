@@ -7,6 +7,8 @@ import { useToast } from '@/composables/useToast'
 import { getEffectivePrompts } from '@/services/prompts'
 import { renderMarkdown } from '@/services/markdown'
 import { callAi, AiError } from '@/services/ai'
+import { getDemoResponse } from '@/services/demo'
+import { getRecommendations } from '@/services/recommendations'
 import AppIcon from './AppIcon.vue'
 import PromptEditor from './PromptEditor.vue'
 
@@ -31,6 +33,89 @@ const loading = ref(false)
 
 const isModeling = computed(() => props.toolId === 'modeling')
 const isFavorite = computed(() => favorites.value.includes(props.toolId))
+const isDemoMode = computed(() => store.demoModeLoaded)
+const recommendations = computed(() => getRecommendations(props.toolId, selectedVariant.value))
+
+function firstRequirementText(): string {
+  return store.requirements[0]?.text ?? store.tempValReqText
+}
+
+function glossaryText(): string {
+  if (store.glossary.length) {
+    return store.glossary.map((entry) => `${entry.term}: ${entry.definition}`).join('\n')
+  }
+  return 'MHD\nMDE-Geraet\nWWS\nOut-of-Stock\nReduktionsregel'
+}
+
+function demoObservationText(): string {
+  return 'Klaus haelt die MHD-Runde taeglich von 08:00-09:30 Uhr durch. Er traegt Ablaufdaten mit einem Kugelschreiber auf einem Zettel ein und tippt diese danach in eine private Excel-Datei auf seinem Firmenhandy. Out-of-Stock-Meldungen schickt er per WhatsApp an die Lager-Gruppe. Wenn der Handscanner haengt, markiert er Artikel mit einem Kugelschreiber direkt auf der Verpackung.'
+}
+
+function demoLegacyText(): string {
+  return 'if (daysUntilExpiry <= 3) { discount = product.isPrivateLabel ? 30 : 20; } if (daysUntilExpiry <= 1) { discount = 50; } syncInventoryBatch("06:00"); deviceAssignment = employeeId + departmentId;'
+}
+
+function demoFeatureText(): string {
+  return 'Automatische Anzeige kritischer MHD-Artikel direkt nach dem Scan inklusive Reduktionsregel und Out-of-Stock-Meldung.'
+}
+
+function demoWorkshopText(): string {
+  return 'Ziel: Anforderungen fuer die Scanner-App gemeinsam ermitteln und priorisieren. Warenabschriften senken, OoS-Situationen reduzieren. Teilnehmer: Klaus (Marktmitarbeiter Frische), Sandra (Abteilungsleiterin Molkerei), Filialleitung, IT-Leitung, WWS-Dienstleister.'
+}
+
+function initialInputForVariant(): string {
+  if (props.toolId === 'prep' && selectedVariant.value === 'simulation') {
+    return result.value || store.tempTranscript
+  }
+
+  if (props.toolId === 'impact') {
+    return 'Das WWS soll durch eine neue Cloud-Loesung (SaaS) ersetzt werden.'
+  }
+
+  return initialInput()
+}
+
+function buildVarMap(): Record<string, string> {
+  const requirement = firstRequirementText()
+
+  switch (props.toolId) {
+    case 'prep':
+      if (selectedVariant.value === 'simulation') {
+        return {
+          Kontext: store.tempVision,
+          Persona: store.tempPersonaText,
+          'Interview-Leitfaden': input.value,
+        }
+      }
+      return {
+        Kontext: store.tempVision || input.value,
+        Persona: store.tempPersonaText || input.value,
+      }
+    case 'traceability':
+      return {
+        'JSON Array aller Anforderungen': JSON.stringify(store.requirements, null, 2),
+      }
+    case 'impact':
+      return {
+        'Anf. Text': requirement,
+        Wunsch: input.value,
+        'Ganzes Backlog': JSON.stringify(store.requirements, null, 2),
+      }
+    case 'translate':
+    case 'poker':
+    case 'backlog':
+      return {
+        Anforderung: requirement,
+        'Gewählte Anforderung': requirement,
+      }
+    default:
+      return {}
+  }
+}
+
+function navigateToRecommendation(targetToolId: string, pillar: string) {
+  store.setView(targetToolId, pillar)
+}
 
 /** Sinnvolle Vorbelegung der Eingabe je nach Werkzeug-Kontext. */
 function initialInput(): string {
@@ -38,16 +123,45 @@ function initialInput(): string {
     case 'goals':
     case 'context':
     case 'stakeholder':
+    case 'matrix':
       return store.tempVision
     case 'persona':
       return store.tempPersonaText
+    case 'prep':
+      return store.tempPersonaText || store.tempVision
+    case 'questionnaire':
+      return 'Scanner-App fuer MHD-Pruefung und Out-of-Stock-Meldung im Supermarkt'
+    case 'apprenticing':
+      return demoObservationText()
+    case 'archaeology':
+      return demoLegacyText()
+    case 'scamper':
+    case 'kano':
+      return demoFeatureText()
+    case 'workshop':
+      return demoWorkshopText()
     case 'extract_req':
       return store.tempTranscript
     case 'formulate':
       return store.tempNote
+    case 'glossary_extract':
+      return store.tempNote || store.tempTranscript
+    case 'glossary_manage':
+      return glossaryText()
+    case 'modeling':
+      return store.tempVision || store.tempNote
+    case 'backlog':
+    case 'poker':
+    case 'translate':
+      return firstRequirementText()
+    case 'traceability':
+      return store.requirements.length ? JSON.stringify(store.requirements, null, 2) : firstRequirementText()
+    case 'impact':
+      return 'Das WWS soll durch eine neue Cloud-Loesung (SaaS) ersetzt werden.'
     case 'smells':
     case 'tests':
     case 'perspective':
+    case 'conflict':
     case 'devil':
     case 'compliance':
     case 'dor':
@@ -60,12 +174,16 @@ function initialInput(): string {
 }
 
 function resetForTool() {
-  input.value = initialInput()
+  input.value = initialInputForVariant()
   result.value = ''
   selectedVariant.value = variantKeys.value[0]
 }
 
 watch(() => props.toolId, resetForTool, { immediate: true })
+
+watch(selectedVariant, () => {
+  input.value = initialInputForVariant()
+})
 
 async function run() {
   if (!input.value.trim()) {
@@ -75,13 +193,20 @@ async function run() {
   loading.value = true
   result.value = ''
   try {
-    const { system, user } = getEffectivePrompts(
-      props.toolId,
-      input.value,
-      {},
-      selectedVariant.value,
-    )
-    result.value = await callAi(user, system)
+    if (isDemoMode.value) {
+      result.value = getDemoResponse(props.toolId, input.value, selectedVariant.value)
+      store.applyToolResult(props.toolId, input.value, result.value, selectedVariant.value)
+      show('Demo-Antwort geladen.', 'success')
+    } else {
+      const { system, user } = getEffectivePrompts(
+        props.toolId,
+        input.value,
+        buildVarMap(),
+        selectedVariant.value,
+      )
+      result.value = await callAi(user, system)
+      store.applyToolResult(props.toolId, input.value, result.value, selectedVariant.value)
+    }
   } catch (error) {
     const msg = error instanceof AiError ? error.message : 'Unerwarteter Fehler.'
     show(msg, 'error')
@@ -161,13 +286,20 @@ function copyResult() {
 
       <PromptEditor :tool-id="toolId" :sub-key="selectedVariant" />
 
+      <p
+        v-if="isDemoMode"
+        class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+      >
+        Demo-Modus aktiv: Dieser Lauf verwendet hinterlegte Beispielantworten statt eines API-Aufrufs.
+      </p>
+
       <button
         class="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-60"
         :disabled="loading"
         @click="run"
       >
         <AppIcon :name="loading ? 'loader-circle' : 'sparkles'" :size="18" :class="{ 'animate-spin': loading }" />
-        {{ loading ? 'KI arbeitet …' : 'Mit KI ausführen' }}
+        {{ loading ? (isDemoMode ? 'Demo wird geladen …' : 'KI arbeitet …') : 'Mit KI ausführen' }}
       </button>
 
       <!-- Ergebnis -->
@@ -182,6 +314,62 @@ function copyResult() {
         <MermaidView v-if="isModeling" :code="mermaidCode" />
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div v-else class="markdown-body text-sm text-slate-700 dark:text-slate-200" v-html="renderMarkdown(result)" />
+
+        <div v-if="recommendations.length" class="mt-8 border-t border-slate-200 pt-6 dark:border-slate-700">
+          <div class="mb-3 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            <span class="text-xs font-extrabold uppercase tracking-widest">Ergebnis gesichert</span>
+          </div>
+
+          <button
+            class="mb-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/10 transition-all duration-300 hover:-translate-y-0.5 hover:from-emerald-700 hover:to-teal-700"
+            @click="navigateToRecommendation(recommendations[0].toolId, recommendations[0].pillar)"
+          >
+            <AppIcon name="arrow-right" :size="16" />
+            <span>Weiter im IREB-Prozess:</span>
+            <span class="rounded-lg border border-emerald-400/20 bg-emerald-500/30 px-3 py-0.5 text-xs font-medium text-emerald-100">
+              {{ recommendations[0].label }}
+            </span>
+          </button>
+
+          <div class="my-5 flex items-center gap-4">
+            <div class="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+            <span class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Optionale Folgeschritte</span>
+            <div class="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+          </div>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              v-for="rec in recommendations"
+              :key="`${rec.pillar}-${rec.toolId}`"
+              class="group flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/70"
+              @click="navigateToRecommendation(rec.toolId, rec.pillar)"
+            >
+              <div class="shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-400 transition-all group-hover:border-emerald-100 group-hover:bg-emerald-50 group-hover:text-emerald-600 dark:border-slate-700 dark:bg-slate-900 dark:group-hover:border-emerald-900/40 dark:group-hover:bg-emerald-950/30">
+                <AppIcon :name="rec.icon" :size="16" />
+              </div>
+              <div class="flex-1">
+                <div class="text-[12px] font-bold leading-snug text-slate-800 transition-colors group-hover:text-emerald-700 dark:text-slate-100 dark:group-hover:text-emerald-300">
+                  {{ rec.label }}
+                </div>
+                <span class="mt-1.5 inline-flex items-center rounded-md border px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider"
+                  :class="{
+                    'border-blue-100 bg-blue-50 text-blue-600 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300': rec.pillar === 'elicitation',
+                    'border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300': rec.pillar === 'documentation',
+                    'border-teal-100 bg-teal-50 text-teal-600 dark:border-teal-900/40 dark:bg-teal-950/30 dark:text-teal-300': rec.pillar === 'validation',
+                    'border-purple-100 bg-purple-50 text-purple-600 dark:border-purple-900/40 dark:bg-purple-950/30 dark:text-purple-300': rec.pillar === 'management',
+                  }"
+                >
+                  {{ rec.pillar === 'elicitation' ? '① Ermittlung' : rec.pillar === 'documentation' ? '② Dokumentation' : rec.pillar === 'validation' ? '③ Validierung' : '④ Management' }}
+                </span>
+              </div>
+              <AppIcon name="arrow-up-right" :size="14" class="mt-0.5 shrink-0 text-slate-300 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-emerald-500 dark:text-slate-500" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
