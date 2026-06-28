@@ -21,6 +21,9 @@ interface ProjectState {
     customPrompts: Record<string, { system: string; user: string }>
     globalContext: GlobalContext
     advisorMessages: AdvisorMessage[]
+    advisorAnswers: Record<string, string>
+    advisorCurrentPhase: string
+    advisorCompleted: boolean
     // Übergreifende Zwischenwerte (überleben Reload)
     tempVision: string
     tempPersonaText: string
@@ -122,6 +125,9 @@ function defaultState(): ProjectState {
         customPrompts: {},
         globalContext: emptyContext(),
         advisorMessages: [],
+        advisorAnswers: {},
+        advisorCurrentPhase: 'elicitation',
+        advisorCompleted: false,
         tempVision: emptyDrafts.tempVision,
         tempPersonaText: emptyDrafts.tempPersonaText,
         tempTranscript: emptyDrafts.tempTranscript,
@@ -158,6 +164,9 @@ export const useProjectStore = defineStore('project', {
                 this.customPrompts = p.customPrompts ?? {}
                 this.globalContext = p.globalContext ?? emptyContext()
                 this.advisorMessages = p.advisorMessages ?? []
+                this.advisorAnswers = p.advisorAnswers ?? {}
+                this.advisorCurrentPhase = p.advisorCurrentPhase ?? 'elicitation'
+                this.advisorCompleted = p.advisorCompleted ?? false
                 this.demoModeLoaded = p.demoModeLoaded ?? false
 
                 if (isLegacyAutoDemoState(p)) {
@@ -302,6 +311,39 @@ export const useProjectStore = defineStore('project', {
 
         clearCustomPrompt(key: string) {
             delete this.customPrompts[key]
+            this.save()
+        },
+
+        addAdvisorMessage(message: AdvisorMessage) {
+            this.advisorMessages.push(message)
+            this.save()
+        },
+
+        clearAdvisorMessages() {
+            this.advisorMessages = []
+            this.save()
+        },
+
+        setAdvisorAnswer(key: string, value: string) {
+            this.advisorAnswers[key] = value
+            this.save()
+        },
+
+        setAdvisorPhase(phase: string) {
+            this.advisorCurrentPhase = phase
+            this.save()
+        },
+
+        setAdvisorCompleted(completed: boolean) {
+            this.advisorCompleted = completed
+            this.save()
+        },
+
+        clearAdvisorState() {
+            this.advisorMessages = []
+            this.advisorAnswers = {}
+            this.advisorCurrentPhase = 'elicitation'
+            this.advisorCompleted = false
             this.save()
         },
     },
