@@ -27,6 +27,16 @@ function loadSupermarktDemo() {
   show('Supermarkt-Story geladen. Demo-Daten wurden übernommen.', 'success')
   open('elicitation', 'goals')
 }
+
+function startFresh() {
+  const confirmed = window.confirm(
+    'Projekt wirklich neu beginnen? Alle Projektdaten inkl. Demo-Status werden gelöscht.',
+  )
+  if (!confirmed) return
+
+  store.reset()
+  show('Projekt zurückgesetzt. Du startest jetzt mit leeren Feldern.', 'success')
+}
 </script>
 
 <template>
@@ -44,13 +54,20 @@ function loadSupermarktDemo() {
         Der Demo-Modus lädt die Supermarkt-Story mit vorbefüllten Beispieldaten und zeigt so den
         roten Faden durch den RE-Prozess. Ohne Demo-Ladung bleiben die Eingabefelder leer.
       </p>
-      <div class="mt-5 flex justify-center">
+      <div class="mt-5 flex flex-wrap justify-center gap-3">
         <button
           class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
           @click="loadSupermarktDemo"
         >
           <AppIcon name="flask-conical" :size="16" />
           Supermarkt-Demo laden
+        </button>
+        <button
+          class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          @click="startFresh"
+        >
+          <AppIcon name="rotate-ccw" :size="16" />
+          Neu beginnen
         </button>
       </div>
     </div>
