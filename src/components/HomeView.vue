@@ -40,6 +40,10 @@ function loadSupermarktDemo() {
         KI-gestützte Werkzeuge entlang der vier Säulen des IREB CPRE: Ermittlung, Dokumentation,
         Validierung und Management von Anforderungen.
       </p>
+      <p class="mx-auto mt-3 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+        Der Demo-Modus lädt die Supermarkt-Story mit vorbefüllten Beispieldaten und zeigt so den
+        roten Faden durch den RE-Prozess. Ohne Demo-Ladung bleiben die Eingabefelder leer.
+      </p>
       <div class="mt-5 flex justify-center">
         <button
           class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
