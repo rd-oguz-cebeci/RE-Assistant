@@ -34,10 +34,13 @@ const loading = ref(false)
 
 const isModeling = computed(() => props.toolId === 'modeling')
 const isExportTool = computed(() => props.toolId === 'export_context')
+const isBacklogTool = computed(() => props.toolId === 'backlog')
 const isFavorite = computed(() => favorites.value.includes(props.toolId))
 const isDemoMode = computed(() => store.demoModeLoaded)
 const recommendations = computed(() => getRecommendations(props.toolId, selectedVariant.value))
 const exportPreview = computed(() => serializeProjectExport())
+const backlogBusy = ref(false)
+const backlogBusyId = ref<string | null>(null)
 
 function firstRequirementText(): string {
   return store.requirements[0]?.text ?? store.tempValReqText
@@ -245,6 +248,64 @@ function copyExport() {
   navigator.clipboard.writeText(exportPreview.value)
   show('Export-Markdown kopiert!', 'success')
 }
+
+function parseBacklogEstimate(text: string): { complexity: string; priority: string } {
+  const normalized = text.replace(/\*\*/g, '').trim()
+  const parts = normalized.split('|').map((part) => part.trim()).filter(Boolean)
+  if (parts.length >= 2) {
+    return { complexity: parts[0], priority: parts[1] }
+  }
+
+  const tokens = normalized.split(/\s+/)
+  if (tokens.length >= 2) {
+    return { complexity: tokens[0], priority: tokens[1] }
+  }
+
+  return { complexity: normalized || 'Unklar', priority: 'Unklar' }
+}
+
+async function estimateRequirement(reqId: string, reqText: string) {
+  backlogBusy.value = true
+  backlogBusyId.value = reqId
+  try {
+    let aiResult = ''
+    if (isDemoMode.value) {
+      aiResult = getDemoResponse('backlog', reqText, selectedVariant.value)
+    } else {
+      const { system, user } = getEffectivePrompts(
+        'backlog',
+        reqText,
+        {
+          Anforderung: reqText,
+          'Gewählte Anforderung': reqText,
+        },
+      )
+      aiResult = await callAi(user, system)
+    }
+
+    const estimate = parseBacklogEstimate(aiResult)
+    store.setRequirementEstimation(reqId, estimate.complexity, estimate.priority)
+    show(`Schätzung gespeichert: ${estimate.complexity} | ${estimate.priority}`, 'success')
+  } catch (error) {
+    const msg = error instanceof AiError ? error.message : 'Schätzung fehlgeschlagen.'
+    show(msg, 'error')
+  } finally {
+    backlogBusy.value = false
+    backlogBusyId.value = null
+  }
+}
+
+async function estimateAllRequirements() {
+  if (!store.requirements.length) {
+    show('Keine Anforderungen vorhanden.', 'error')
+    return
+  }
+
+  for (const req of store.requirements) {
+    // eslint-disable-next-line no-await-in-loop
+    await estimateRequirement(req.id, req.text)
+  }
+}
 </script>
 
 <template>
@@ -325,29 +386,82 @@ function copyExport() {
       </template>
 
       <template v-else>
-        <textarea
-          v-model="input"
-          class="custom-scrollbar mb-4 h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/80"
-          placeholder="Ihre Eingabe …"
-        />
+        <template v-if="isBacklogTool">
+          <p class="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-xs text-indigo-800 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-200">
+            Hier sehen Sie alle vorhandenen User Stories/Anforderungen. Sie koennen jede einzeln oder gesammelt per KI mit Komplexitaet und MoSCoW bewerten.
+          </p>
 
-        <PromptEditor :tool-id="toolId" :sub-key="selectedVariant" />
+          <div class="mb-4 flex flex-wrap gap-3">
+            <button
+              class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+              :disabled="backlogBusy || !store.requirements.length"
+              @click="estimateAllRequirements"
+            >
+              <AppIcon :name="backlogBusy ? 'loader-circle' : 'sparkles'" :size="16" :class="{ 'animate-spin': backlogBusy }" />
+              Alle Storys schaetzen
+            </button>
+          </div>
 
-        <p
-          v-if="isDemoMode"
-          class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
-        >
-          Demo-Modus aktiv: Dieser Lauf verwendet hinterlegte Beispielantworten statt eines API-Aufrufs.
-        </p>
+          <div v-if="store.requirements.length" class="space-y-3">
+            <div
+              v-for="req in store.requirements"
+              :key="req.id"
+              class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/60"
+            >
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ req.id }}</div>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="rounded-md bg-slate-100 px-2 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    Komplexitaet: {{ req.complexity || 'n/a' }}
+                  </span>
+                  <span class="rounded-md bg-slate-100 px-2 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    MoSCoW: {{ req.priority || 'n/a' }}
+                  </span>
+                </div>
+              </div>
 
-        <button
-          class="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-60"
-          :disabled="loading"
-          @click="run"
-        >
-          <AppIcon :name="loading ? 'loader-circle' : 'sparkles'" :size="18" :class="{ 'animate-spin': loading }" />
-          {{ loading ? (isDemoMode ? 'Demo wird geladen …' : 'KI arbeitet …') : 'Mit KI ausführen' }}
-        </button>
+              <p class="mb-3 text-sm text-slate-700 dark:text-slate-200">{{ req.text }}</p>
+
+              <button
+                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                :disabled="backlogBusy"
+                @click="estimateRequirement(req.id, req.text)"
+              >
+                <AppIcon :name="backlogBusyId === req.id ? 'loader-circle' : 'sparkles'" :size="14" :class="{ 'animate-spin': backlogBusyId === req.id }" />
+                KI-Schaetzung
+              </button>
+            </div>
+          </div>
+          <p v-else class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+            Noch keine Anforderungen vorhanden. Erstelle zuerst User Stories, z. B. mit "Natuerlichsprachlich".
+          </p>
+        </template>
+
+        <template v-else>
+          <textarea
+            v-model="input"
+            class="custom-scrollbar mb-4 h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/80"
+            placeholder="Ihre Eingabe …"
+          />
+
+          <PromptEditor :tool-id="toolId" :sub-key="selectedVariant" />
+
+          <p
+            v-if="isDemoMode"
+            class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            Demo-Modus aktiv: Dieser Lauf verwendet hinterlegte Beispielantworten statt eines API-Aufrufs.
+          </p>
+
+          <button
+            class="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-60"
+            :disabled="loading"
+            @click="run"
+          >
+            <AppIcon :name="loading ? 'loader-circle' : 'sparkles'" :size="18" :class="{ 'animate-spin': loading }" />
+            {{ loading ? (isDemoMode ? 'Demo wird geladen …' : 'KI arbeitet …') : 'Mit KI ausführen' }}
+          </button>
+        </template>
       </template>
 
       <!-- Ergebnis -->

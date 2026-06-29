@@ -291,6 +291,14 @@ export const useProjectStore = defineStore('project', {
             this.save()
         },
 
+        setRequirementEstimation(id: string, complexity: string, priority: string) {
+            const req = this.requirements.find((item) => item.id === id)
+            if (!req) return
+            req.complexity = complexity
+            req.priority = priority
+            this.save()
+        },
+
         toggleFavorite(toolId: string) {
             const idx = this.favorites.indexOf(toolId)
             if (idx >= 0) this.favorites.splice(idx, 1)
