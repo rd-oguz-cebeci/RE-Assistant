@@ -228,7 +228,7 @@ function copyLastAssistantMessage() {
 <template>
   <div class="mx-auto max-w-4xl">
     <div class="mb-6 flex items-start gap-4">
-      <div class="rounded-2xl bg-blue-600/10 p-3 text-blue-600 dark:text-blue-400">
+      <div class="rounded-2xl bg-brand-soft p-3 text-brand dark:text-brand-strong">
         <AppIcon name="message-square" :size="26" />
       </div>
       <div class="flex-1">
@@ -288,7 +288,7 @@ function copyLastAssistantMessage() {
           v-for="(msg, idx) in messages"
           :key="idx"
           class="max-w-[90%] rounded-2xl px-4 py-3 text-sm"
-          :class="msg.role === 'assistant' ? 'bg-white text-slate-700 dark:bg-slate-800 dark:text-slate-200' : 'ml-auto bg-blue-600 text-white'"
+          :class="msg.role === 'assistant' ? 'bg-white text-slate-700 dark:bg-slate-800 dark:text-slate-200' : 'ml-auto bg-brand text-white'"
         >
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div v-if="msg.role === 'assistant'" class="markdown-body" v-html="renderMarkdown(msg.text)" />
@@ -309,7 +309,7 @@ function copyLastAssistantMessage() {
           :disabled="loading || hasFinishedFlow"
         />
         <button
-          class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+          class="inline-flex items-center justify-center gap-2 rounded-xl btn-brand px-4 py-3 text-sm font-semibold text-white transition-colors disabled:opacity-60"
           :disabled="loading || hasFinishedFlow"
           @click="submit"
         >

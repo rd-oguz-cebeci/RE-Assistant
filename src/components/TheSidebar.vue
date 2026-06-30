@@ -56,7 +56,7 @@ function goHome() {
         class="mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors"
         :class="
           store.activeView === 'home'
-            ? 'bg-blue-600 text-white'
+            ? 'bg-brand text-white'
             : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
         "
         @click="goHome"
@@ -68,7 +68,7 @@ function goHome() {
         class="mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors"
         :class="
           store.activeView === 'advisor'
-            ? 'bg-blue-600 text-white'
+            ? 'bg-brand text-white'
             : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
         "
         @click="store.setView('advisor')"
@@ -98,7 +98,7 @@ function goHome() {
             class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors"
             :class="
               store.activeView === tool.id
-                ? 'bg-blue-50 font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
+                ? 'bg-brand-soft font-semibold text-brand dark:bg-brand-soft/40 dark:text-brand-strong'
                 : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
             "
             @click="openTool(section.id, tool.id)"

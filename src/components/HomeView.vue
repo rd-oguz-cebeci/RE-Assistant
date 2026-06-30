@@ -56,7 +56,7 @@ function startFresh() {
       </p>
       <div class="mt-5 flex flex-wrap justify-center gap-3">
         <button
-          class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+          class="inline-flex items-center gap-2 rounded-xl btn-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors"
           @click="loadSupermarktDemo"
         >
           <AppIcon name="flask-conical" :size="16" />
@@ -84,7 +84,7 @@ function startFresh() {
           class="glass-panel flex items-center gap-3 rounded-xl border p-4 text-left transition-transform hover:-translate-y-0.5"
           @click="open(findTool(t.id)!.section.id, t.id)"
         >
-          <AppIcon :name="t.icon" :size="20" class="text-blue-600" />
+          <AppIcon :name="t.icon" :size="20" class="text-brand" />
           <span class="text-sm font-semibold text-slate-700 dark:text-slate-200">{{ t.label }}</span>
         </button>
       </div>
@@ -98,7 +98,7 @@ function startFresh() {
         class="glass-panel rounded-2xl border p-6"
       >
         <button class="mb-3 flex items-center gap-3 text-left" @click="openSection(section.id)">
-          <div class="rounded-xl bg-blue-600/10 p-2.5 text-blue-600 dark:text-blue-400">
+          <div class="rounded-xl bg-brand-soft p-2.5 text-brand dark:text-brand-strong">
             <AppIcon :name="section.icon" :size="22" />
           </div>
           <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100">{{ section.label }}</h3>
@@ -108,7 +108,7 @@ function startFresh() {
           <button
             v-for="tool in section.children"
             :key="tool.id"
-            class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-blue-600 hover:text-white dark:bg-slate-800 dark:text-slate-300"
+            class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-brand hover:text-white dark:bg-slate-800 dark:text-slate-300"
             @click="open(section.id, tool.id)"
           >
             {{ tool.label }}

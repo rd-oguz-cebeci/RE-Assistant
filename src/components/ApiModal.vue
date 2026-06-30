@@ -161,7 +161,7 @@ function save() {
         id="api-modal-title"
         class="mb-4 flex items-center gap-2 text-xl font-bold text-slate-800 dark:text-slate-100"
       >
-        <AppIcon name="key" :size="20" class="text-blue-600" /> KI-Anbindung
+        <AppIcon name="key" :size="20" class="text-brand" /> KI-Anbindung
       </h3>
       <p class="mb-6 text-sm text-slate-600 dark:text-slate-300">{{ description }}</p>
 
@@ -230,7 +230,7 @@ function save() {
           Abbrechen
         </button>
         <button
-          class="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+          class="rounded-xl btn-brand px-5 py-2.5 text-sm font-semibold text-white"
           @click="save"
         >
           Speichern
