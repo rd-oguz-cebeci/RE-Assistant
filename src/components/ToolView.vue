@@ -312,7 +312,7 @@ async function estimateAllRequirements() {
   <div v-if="tool" class="mx-auto max-w-3xl">
     <!-- Kopf -->
     <div class="mb-6 flex items-start gap-4">
-      <div class="rounded-2xl bg-blue-600/10 p-3 text-blue-600 dark:text-blue-400">
+      <div class="rounded-2xl bg-brand-soft p-3 text-brand dark:text-brand-strong">
         <AppIcon :name="tool.icon" :size="26" />
       </div>
       <div class="flex-1">
@@ -335,9 +335,9 @@ async function estimateAllRequirements() {
 
     <!-- Warum-Box -->
     <div
-      class="mb-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-slate-600 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-slate-300"
+      class="mb-6 rounded-2xl border border-brand bg-brand-soft p-4 text-sm text-slate-600 dark:text-slate-300"
     >
-      <div class="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+      <div class="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-brand dark:text-brand-strong">
         <AppIcon name="lightbulb" :size="14" /> Warum nach IREB?
       </div>
       {{ tool.why }}
@@ -393,7 +393,7 @@ async function estimateAllRequirements() {
 
           <div class="mb-4 flex flex-wrap gap-3">
             <button
-              class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+              class="inline-flex items-center gap-2 rounded-xl btn-brand px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-60"
               :disabled="backlogBusy || !store.requirements.length"
               @click="estimateAllRequirements"
             >
@@ -454,7 +454,7 @@ async function estimateAllRequirements() {
           </p>
 
           <button
-            class="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition-all hover:bg-blue-700 disabled:opacity-60"
+            class="flex w-full items-center justify-center gap-2 rounded-xl btn-brand py-3.5 text-sm font-semibold text-white transition-all disabled:opacity-60"
             :disabled="loading"
             @click="run"
           >
@@ -519,7 +519,7 @@ async function estimateAllRequirements() {
                 </div>
                 <span class="mt-1.5 inline-flex items-center rounded-md border px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider"
                   :class="{
-                    'border-blue-100 bg-blue-50 text-blue-600 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300': rec.pillar === 'elicitation',
+                    'border-brand bg-brand-soft text-brand dark:text-brand-strong': rec.pillar === 'elicitation',
                     'border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300': rec.pillar === 'documentation',
                     'border-teal-100 bg-teal-50 text-teal-600 dark:border-teal-900/40 dark:bg-teal-950/30 dark:text-teal-300': rec.pillar === 'validation',
                     'border-purple-100 bg-purple-50 text-purple-600 dark:border-purple-900/40 dark:bg-purple-950/30 dark:text-purple-300': rec.pillar === 'management',

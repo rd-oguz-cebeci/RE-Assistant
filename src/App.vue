@@ -45,7 +45,7 @@ const activeSection = computed(() => menuStructure.find((section) => section.id 
           class="mx-auto max-w-4xl"
         >
           <div class="mb-6 flex items-start gap-4">
-            <div class="rounded-2xl bg-blue-600/10 p-3 text-blue-600 dark:text-blue-400">
+            <div class="rounded-2xl bg-brand-soft p-3 text-brand dark:text-brand-strong">
               <span class="text-xl font-extrabold">{{ activeSection.label.split('.')[0] }}</span>
             </div>
             <div>
@@ -58,8 +58,8 @@ const activeSection = computed(() => menuStructure.find((section) => section.id 
             </div>
           </div>
 
-          <div class="mb-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-5 text-sm text-slate-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-slate-200">
-            <div class="mb-2 text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+          <div class="mb-6 rounded-2xl border border-brand bg-brand-soft p-5 text-sm text-slate-700 dark:text-slate-200">
+            <div class="mb-2 text-[11px] font-bold uppercase tracking-wider text-brand dark:text-brand-strong">
               Warum nach IREB CPRE?
             </div>
             <p>{{ activeSection.why }}</p>
@@ -77,7 +77,7 @@ const activeSection = computed(() => menuStructure.find((section) => section.id 
               <button
                 v-for="tool in activeSection.children"
                 :key="tool.id"
-                class="rounded-xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/40 dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-blue-900/40 dark:hover:bg-blue-950/20"
+                class="rounded-xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-brand hover:bg-brand-soft/70 dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-brand dark:hover:bg-brand-soft/50"
                 @click="store.setView(tool.id, activeSection.id)"
               >
                 <div class="text-sm font-semibold text-slate-800 dark:text-slate-100">

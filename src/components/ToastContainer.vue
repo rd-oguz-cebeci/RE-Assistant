@@ -7,7 +7,7 @@ const { toasts, dismiss } = useToast()
 const styles: Record<string, string> = {
   success: 'border-emerald-500 text-emerald-700 dark:text-emerald-300',
   error: 'border-red-500 text-red-700 dark:text-red-300',
-  info: 'border-blue-500 text-blue-700 dark:text-blue-300',
+  info: 'border-brand text-brand dark:text-brand-strong',
 }
 const iconNames: Record<string, string> = {
   success: 'check-circle',
