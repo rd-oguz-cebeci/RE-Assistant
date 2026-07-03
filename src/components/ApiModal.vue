@@ -15,6 +15,7 @@ type ConfigType = AiProvider | 'mcp'
 
 const configType = ref<ConfigType>(settings.provider)
 const credential = ref('')
+const mcpUrl = ref('')
 const showKey = ref(false)
 
 const dialog = ref<HTMLElement | null>(null)
@@ -27,6 +28,7 @@ watch(
     if (open) {
       configType.value = settings.provider
       credential.value = settings.apiKey
+      mcpUrl.value = settings.mcpUrl
       showKey.value = false
       lastFocused = document.activeElement as HTMLElement | null
       await nextTick()
@@ -43,6 +45,7 @@ watch(
   (newType) => {
     if (newType === 'mcp') {
       credential.value = settings.mcpBearerToken
+      mcpUrl.value = settings.mcpUrl
     } else {
       credential.value = settings.apiKey
     }
@@ -133,7 +136,8 @@ function save() {
 
   if (configType.value === 'mcp') {
     settings.setMcpBearerToken(cred)
-    show('MCP Bearer Token gespeichert.', 'success')
+    settings.setMcpUrl(mcpUrl.value)
+    show('MCP-Einstellungen gespeichert.', 'success')
   } else {
     settings.setApiCredentials(configType.value as AiProvider, cred)
     show('API-Anbindung gespeichert.', 'success')
@@ -210,6 +214,25 @@ function save() {
       </div>
 
       <p v-if="hint" class="mb-6 text-[11px] text-slate-400 dark:text-slate-500">{{ hint }}</p>
+
+      <template v-if="configType === 'mcp'">
+        <label
+          for="mcp-url"
+          class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500"
+        >
+          MCP-Endpunkt-URL
+        </label>
+        <input
+          id="mcp-url"
+          v-model="mcpUrl"
+          type="url"
+          placeholder="https://mcp.atlassian.com/v1/mcp"
+          autocomplete="off"
+          spellcheck="false"
+          class="mb-6 w-full rounded-xl border border-slate-300 bg-white p-3.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+          @keydown.enter="save"
+        />
+      </template>
 
       <p
         class="mb-6 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-[12px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
