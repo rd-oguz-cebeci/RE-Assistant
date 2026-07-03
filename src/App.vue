@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+
+const appVersion = __APP_VERSION__
+
 import { useProjectStore } from '@/stores/project'
 import { findTool, menuStructure } from '@/config/menu'
 import TheSidebar from '@/components/TheSidebar.vue'
@@ -36,7 +39,7 @@ const activeSection = computed(() => menuStructure.find((section) => section.id 
         @open-api="apiOpen = true"
       />
 
-      <main class="custom-scrollbar flex-1 overflow-y-auto p-4 sm:p-8">
+      <main class="custom-scrollbar flex-1 overflow-y-auto p-4 sm:p-8 flex flex-col">
         <HomeView v-if="isHome" />
         <AdvisorView v-else-if="store.activeView === 'advisor'" />
         <ToolView v-else-if="activeTool" :key="store.activeView" :tool-id="store.activeView" />
@@ -93,6 +96,17 @@ const activeSection = computed(() => menuStructure.find((section) => section.id 
         <div v-else class="mx-auto max-w-xl py-20 text-center text-slate-500">
           Ansicht nicht gefunden.
         </div>
+
+        <footer class="mt-auto pt-8 pb-2 text-center text-xs text-slate-400 dark:text-slate-600 select-none">
+          RE-Assistant v{{ appVersion }}
+          &nbsp;·&nbsp;
+          <a
+            href="https://github.com/rd-oguz-cebeci/RE-Assistant"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="underline hover:text-slate-600 dark:hover:text-slate-400 transition-colors"
+          >GitHub</a>
+        </footer>
       </main>
     </div>
 

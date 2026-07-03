@@ -1,6 +1,9 @@
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { readFileSync } from 'node:fs'
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
 
 // GitHub Pages serviert das Projekt unter /<repo-name>/.
 // In der CI wird GITHUB_ACTIONS gesetzt → Base-Pfad setzen; lokal '/' verwenden.
@@ -65,6 +68,9 @@ export default defineConfig(({ mode }) => {
 
     return {
         base,
+        define: {
+            __APP_VERSION__: JSON.stringify(pkg.version),
+        },
         plugins: [vue(), cspPlugin()],
         // Quell-Static-Assets liegen in static/, der Build-Output in public/
         publicDir: 'static',

@@ -1,21 +1,17 @@
 export class McpError extends Error {}
 
-export const MCP_PROXY_URL = import.meta.env.VITE_MCP_PROXY_URL as string | undefined
-export const MCP_URL = import.meta.env.VITE_MCP_URL as string | undefined
 export const MCP_BEARER_TOKEN = import.meta.env.VITE_MCP_BEARER_TOKEN as string | undefined
 
-const DEFAULT_MCP_URL = 'https://mcp.atlassian.com/v1/mcp'
-
-function buildMcpUrl(path?: string): string {
-    const base = MCP_PROXY_URL || MCP_URL || DEFAULT_MCP_URL
-    if (!path) return base
+function buildMcpUrl(baseUrl: string, path?: string): string {
+    if (!path) return baseUrl
     if (path.startsWith('http://') || path.startsWith('https://')) return path
-    if (base.endsWith('/')) return `${base}${path.replace(/^\//, '')}`
-    return `${base}${path.startsWith('/') ? '' : '/'}${path}`
+    if (baseUrl.endsWith('/')) return `${baseUrl}${path.replace(/^\//, '')}`
+    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`
 }
 
-export async function fetchMcpContext(path?: string, bearerToken?: string): Promise<Record<string, unknown>> {
-    const url = buildMcpUrl(path)
+export async function fetchMcpContext(path?: string, bearerToken?: string, mcpUrl?: string): Promise<Record<string, unknown>> {
+    const base = mcpUrl?.trim() || 'https://mcp.atlassian.com/v1/mcp'
+    const url = buildMcpUrl(base, path)
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     }

@@ -1,5 +1,5 @@
 import { useSettingsStore } from '@/stores/settings'
-import { fetchMcpContext, serializeMcpContext, MCP_PROXY_URL, MCP_URL, MCP_BEARER_TOKEN } from '@/services/mcp'
+import { fetchMcpContext, serializeMcpContext, MCP_BEARER_TOKEN } from '@/services/mcp'
 
 /** Vom KI-Service ausgelöster Fehler (für gezielte Toast-Meldungen). */
 export class AiError extends Error { }
@@ -16,14 +16,14 @@ function delay(ms: number) {
 
 let cachedMcpContext: string | null | undefined
 
-async function maybeAttachMcpContext(systemInstruction: string, bearerToken?: string): Promise<string> {
+async function maybeAttachMcpContext(systemInstruction: string, bearerToken?: string, mcpUrl?: string): Promise<string> {
     const activeToken = bearerToken?.trim() || undefined
-    const shouldFetchMcp = MCP_PROXY_URL || MCP_URL || MCP_BEARER_TOKEN || activeToken
+    const shouldFetchMcp = MCP_BEARER_TOKEN || activeToken
     if (!shouldFetchMcp) return systemInstruction
 
     if (cachedMcpContext === undefined) {
         try {
-            const contextData = await fetchMcpContext(undefined, activeToken)
+            const contextData = await fetchMcpContext(undefined, activeToken, mcpUrl)
             const serialized = serializeMcpContext(contextData).trim()
             cachedMcpContext = serialized || null
         } catch {
@@ -44,7 +44,7 @@ async function maybeAttachMcpContext(systemInstruction: string, bearerToken?: st
  */
 export async function callAi(prompt: string, systemInstruction = ''): Promise<string> {
     const settings = useSettingsStore()
-    const mergedInstruction = await maybeAttachMcpContext(systemInstruction, settings.mcpBearerToken)
+    const mergedInstruction = await maybeAttachMcpContext(systemInstruction, settings.mcpBearerToken, settings.mcpUrl)
     const apiKey = settings.apiKey.trim()
 
     if (!apiKey) {
