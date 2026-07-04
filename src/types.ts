@@ -41,6 +41,8 @@ export interface Requirement {
     type?: string
     complexity?: string
     priority?: string
+    /** Jira-Issue-Key nach dem Sync, z. B. "REQ-42". */
+    jiraKey?: string
 }
 
 /** Glossar-Eintrag (Single Source of Truth für Fachbegriffe). */

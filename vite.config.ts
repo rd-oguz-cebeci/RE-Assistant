@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // GitHub Pages serviert das Projekt unter /<repo-name>/.
@@ -14,7 +14,7 @@ const CSP = [
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "img-src 'self' data:",
-    "connect-src 'self' https://generativelanguage.googleapis.com https://api.anthropic.com",
+    "connect-src 'self' https://generativelanguage.googleapis.com https://api.anthropic.com https://*.atlassian.net",
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",
@@ -35,18 +35,41 @@ function cspPlugin(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-    base,
-    plugins: [vue(), cspPlugin()],
-    // Quell-Static-Assets liegen in static/, der Build-Output in public/
-    publicDir: 'static',
-    build: {
-        outDir: 'public',
-        emptyOutDir: true,
-    },
-    resolve: {
-        alias: {
-            '@': fileURLToPath(new URL('./src', import.meta.url)),
+export default defineConfig(({ mode }) => {
+    const env = loadEnv(mode, process.cwd(), '')
+    const atlassianDomain = env.VITE_ATLASSIAN_DOMAIN ?? ''
+
+    return {
+        base,
+        plugins: [vue(), cspPlugin()],
+        // Quell-Static-Assets liegen in static/, der Build-Output in public/
+        publicDir: 'static',
+        build: {
+            outDir: 'public',
+            emptyOutDir: true,
         },
-    },
+        resolve: {
+            alias: {
+                '@': fileURLToPath(new URL('./src', import.meta.url)),
+            },
+        },
+        server: {
+            proxy: atlassianDomain
+                ? {
+                      '/api/atlassian/jira': {
+                          target: `https://${atlassianDomain}`,
+                          changeOrigin: true,
+                          secure: true,
+                          rewrite: (path) => path.replace('/api/atlassian/jira', '/rest/api/3'),
+                      },
+                      '/api/atlassian/wiki': {
+                          target: `https://${atlassianDomain}`,
+                          changeOrigin: true,
+                          secure: true,
+                          rewrite: (path) => path.replace('/api/atlassian/wiki', '/wiki/rest/api'),
+                      },
+                  }
+                : {},
+        },
+    }
 })

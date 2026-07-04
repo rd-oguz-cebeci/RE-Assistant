@@ -5,12 +5,36 @@ const KEY_API = 'gemini_api_key'
 const KEY_PROVIDER = 'api_provider'
 const KEY_MCP_BEARER_TOKEN = 'mcp_bearer_token'
 const KEY_THEME = 'theme'
+const KEY_ATLASSIAN = 'atlassian_config'
 
 interface SettingsState {
     apiKey: string
     provider: AiProvider
     mcpBearerToken: string
     isDark: boolean
+    atlassianDomain: string
+    atlassianEmail: string
+    atlassianToken: string
+    atlassianJiraProject: string
+    atlassianConfluenceSpace: string
+}
+
+interface AtlassianConfigStorage {
+    domain: string
+    email: string
+    token: string
+    jiraProject: string
+    confluenceSpace: string
+}
+
+function loadAtlassianConfig(): AtlassianConfigStorage {
+    try {
+        const raw = localStorage.getItem(KEY_ATLASSIAN)
+        if (raw) return JSON.parse(raw) as AtlassianConfigStorage
+    } catch {
+        // Ignore corrupt data.
+    }
+    return { domain: '', email: '', token: '', jiraProject: '', confluenceSpace: '' }
 }
 
 function detectInitialTheme(): boolean {
@@ -20,15 +44,28 @@ function detectInitialTheme(): boolean {
 }
 
 export const useSettingsStore = defineStore('settings', {
-    state: (): SettingsState => ({
-        apiKey: localStorage.getItem(KEY_API) ?? '',
-        provider: (localStorage.getItem(KEY_PROVIDER) as AiProvider) ?? 'gemini',
-        mcpBearerToken: localStorage.getItem(KEY_MCP_BEARER_TOKEN) ?? '',
-        isDark: detectInitialTheme(),
-    }),
+    state: (): SettingsState => {
+        const atl = loadAtlassianConfig()
+        return {
+            apiKey: localStorage.getItem(KEY_API) ?? '',
+            provider: (localStorage.getItem(KEY_PROVIDER) as AiProvider) ?? 'gemini',
+            mcpBearerToken: localStorage.getItem(KEY_MCP_BEARER_TOKEN) ?? '',
+            isDark: detectInitialTheme(),
+            atlassianDomain: atl.domain,
+            atlassianEmail: atl.email,
+            atlassianToken: atl.token,
+            atlassianJiraProject: atl.jiraProject,
+            atlassianConfluenceSpace: atl.confluenceSpace,
+        }
+    },
 
     getters: {
         hasApiKey: (state) => state.apiKey.trim().length > 0,
+        hasAtlassianConfig: (state) =>
+            state.atlassianDomain.trim().length > 0 &&
+            state.atlassianEmail.trim().length > 0 &&
+            state.atlassianToken.trim().length > 0 &&
+            state.atlassianJiraProject.trim().length > 0,
     },
 
     actions: {
@@ -50,6 +87,29 @@ export const useSettingsStore = defineStore('settings', {
             } else {
                 localStorage.removeItem(KEY_MCP_BEARER_TOKEN)
             }
+        },
+
+        setAtlassianConfig(config: {
+            domain: string
+            email: string
+            token: string
+            jiraProject: string
+            confluenceSpace: string
+        }) {
+            this.atlassianDomain = config.domain.trim()
+            this.atlassianEmail = config.email.trim()
+            this.atlassianToken = config.token.trim()
+            this.atlassianJiraProject = config.jiraProject.trim().toUpperCase()
+            this.atlassianConfluenceSpace = config.confluenceSpace.trim().toUpperCase()
+
+            const stored: AtlassianConfigStorage = {
+                domain: this.atlassianDomain,
+                email: this.atlassianEmail,
+                token: this.atlassianToken,
+                jiraProject: this.atlassianJiraProject,
+                confluenceSpace: this.atlassianConfluenceSpace,
+            }
+            localStorage.setItem(KEY_ATLASSIAN, JSON.stringify(stored))
         },
 
         applyTheme() {

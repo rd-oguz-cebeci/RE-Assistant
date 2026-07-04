@@ -3,6 +3,7 @@ import { computed, ref, watch, defineAsyncComponent } from 'vue'
 import { storeToRefs } from 'pinia'
 import { findTool } from '@/config/menu'
 import { useProjectStore } from '@/stores/project'
+import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables/useToast'
 import { getEffectivePrompts } from '@/services/prompts'
 import { renderMarkdown } from '@/services/markdown'
@@ -10,6 +11,7 @@ import { callAi, AiError } from '@/services/ai'
 import { getDemoResponse } from '@/services/demo'
 import { getRecommendations } from '@/services/recommendations'
 import { downloadProjectExport, serializeProjectExport } from '@/services/export'
+import { createJiraIssue, syncProjectToConfluence, AtlassianError } from '@/services/atlassian'
 import AppIcon from './AppIcon.vue'
 import PromptEditor from './PromptEditor.vue'
 
@@ -19,6 +21,7 @@ const MermaidView = defineAsyncComponent(() => import('./MermaidView.vue'))
 const props = defineProps<{ toolId: string }>()
 
 const store = useProjectStore()
+const settings = useSettingsStore()
 const { favorites } = storeToRefs(store)
 const { show } = useToast()
 
@@ -41,6 +44,11 @@ const recommendations = computed(() => getRecommendations(props.toolId, selected
 const exportPreview = computed(() => serializeProjectExport())
 const backlogBusy = ref(false)
 const backlogBusyId = ref<string | null>(null)
+
+// Atlassian Jira/Confluence sync state
+const jiraBusy = ref(false)
+const jiraBusyId = ref<string | null>(null)
+const confluenceBusy = ref(false)
 
 function firstRequirementText(): string {
   return store.requirements[0]?.text ?? store.tempValReqText
@@ -302,8 +310,102 @@ async function estimateAllRequirements() {
   }
 
   for (const req of store.requirements) {
-    // eslint-disable-next-line no-await-in-loop
     await estimateRequirement(req.id, req.text)
+  }
+}
+
+function buildAtlassianConfig() {
+  return {
+    domain: settings.atlassianDomain,
+    email: settings.atlassianEmail,
+    token: settings.atlassianToken,
+    jiraProjectKey: settings.atlassianJiraProject,
+    confluenceSpaceKey: settings.atlassianConfluenceSpace,
+  }
+}
+
+async function pushRequirementToJira(reqId: string) {
+  const req = store.requirements.find((r) => r.id === reqId)
+  if (!req) return
+
+  if (!settings.hasAtlassianConfig) {
+    show('Bitte zuerst Atlassian Cloud in den Einstellungen (Schlüssel-Symbol) konfigurieren.', 'error')
+    return
+  }
+
+  jiraBusy.value = true
+  jiraBusyId.value = reqId
+  try {
+    const issue = await createJiraIssue(buildAtlassianConfig(), req)
+    store.setRequirementJiraKey(reqId, issue.key)
+    show(`Jira-Issue erstellt: ${issue.key}`, 'success')
+  } catch (error) {
+    const msg = error instanceof AtlassianError ? error.message : 'Jira-Push fehlgeschlagen.'
+    show(msg, 'error')
+  } finally {
+    jiraBusy.value = false
+    jiraBusyId.value = null
+  }
+}
+
+async function pushAllRequirementsToJira() {
+  const unpushed = store.requirements.filter((r) => !r.jiraKey)
+  if (!unpushed.length) {
+    show('Alle Anforderungen sind bereits in Jira vorhanden.', 'error')
+    return
+  }
+
+  if (!settings.hasAtlassianConfig) {
+    show('Bitte zuerst Atlassian Cloud in den Einstellungen konfigurieren.', 'error')
+    return
+  }
+
+  jiraBusy.value = true
+  jiraBusyId.value = null
+  let successCount = 0
+  try {
+    for (const req of unpushed) {
+      const issue = await createJiraIssue(buildAtlassianConfig(), req)
+      store.setRequirementJiraKey(req.id, issue.key)
+      successCount++
+    }
+    show(`${successCount} Anforderung${successCount !== 1 ? 'en' : ''} nach Jira exportiert.`, 'success')
+  } catch (error) {
+    const msg = error instanceof AtlassianError ? error.message : 'Jira-Push fehlgeschlagen.'
+    show(`${successCount} erfolgreich, dann Fehler: ${msg}`, 'error')
+  } finally {
+    jiraBusy.value = false
+  }
+}
+
+async function syncToConfluence() {
+  if (!settings.atlassianConfluenceSpace) {
+    show('Bitte zuerst einen Confluence-Space-Schlüssel in den Einstellungen eintragen.', 'error')
+    return
+  }
+
+  if (!settings.hasAtlassianConfig) {
+    show('Bitte zuerst Atlassian Cloud in den Einstellungen konfigurieren.', 'error')
+    return
+  }
+
+  confluenceBusy.value = true
+  try {
+    const result = await syncProjectToConfluence(buildAtlassianConfig(), {
+      vision: store.globalContext.vision || store.tempVision,
+      stakeholders: store.globalContext.stakeholders,
+      personas: store.globalContext.personas,
+      requirements: store.requirements,
+      glossary: store.glossary,
+      existingPageId: store.confluencePageId || undefined,
+    })
+    store.setConfluencePageId(result.id)
+    show(`Confluence-Seite aktualisiert. ID: ${result.id}`, 'success')
+  } catch (error) {
+    const msg = error instanceof AtlassianError ? error.message : 'Confluence-Sync fehlgeschlagen.'
+    show(msg, 'error')
+  } finally {
+    confluenceBusy.value = false
   }
 }
 </script>
@@ -382,6 +484,16 @@ async function estimateAllRequirements() {
             <AppIcon name="copy" :size="18" />
             Markdown kopieren
           </button>
+
+          <button
+            class="flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-700 transition-all hover:bg-blue-100 disabled:opacity-60 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+            :disabled="confluenceBusy"
+            :title="settings.atlassianConfluenceSpace ? 'Projektdokumentation nach Confluence synchronisieren' : 'Confluence-Space-Schlüssel in Atlassian-Einstellungen hinterlegen'"
+            @click="syncToConfluence"
+          >
+            <AppIcon :name="confluenceBusy ? 'loader-circle' : 'cloud-upload'" :size="18" :class="{ 'animate-spin': confluenceBusy }" />
+            {{ store.confluencePageId ? 'Confluence aktualisieren' : 'Nach Confluence' }}
+          </button>
         </div>
       </template>
 
@@ -399,6 +511,16 @@ async function estimateAllRequirements() {
             >
               <AppIcon :name="backlogBusy ? 'loader-circle' : 'sparkles'" :size="16" :class="{ 'animate-spin': backlogBusy }" />
               Alle Storys schaetzen
+            </button>
+
+            <button
+              class="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-60 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+              :disabled="jiraBusy || !store.requirements.length"
+              :title="settings.hasAtlassianConfig ? 'Alle nicht-syncierten Anforderungen als Jira-Issues anlegen' : 'Atlassian Cloud zuerst konfigurieren'"
+              @click="pushAllRequirementsToJira"
+            >
+              <AppIcon :name="jiraBusy && !jiraBusyId ? 'loader-circle' : 'arrow-up-right'" :size="16" :class="{ 'animate-spin': jiraBusy && !jiraBusyId }" />
+              Alle nach Jira
             </button>
           </div>
 
@@ -422,14 +544,36 @@ async function estimateAllRequirements() {
 
               <p class="mb-3 text-sm text-slate-700 dark:text-slate-200">{{ req.text }}</p>
 
-              <button
-                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                :disabled="backlogBusy"
-                @click="estimateRequirement(req.id, req.text)"
-              >
-                <AppIcon :name="backlogBusyId === req.id ? 'loader-circle' : 'sparkles'" :size="14" :class="{ 'animate-spin': backlogBusyId === req.id }" />
-                KI-Schaetzung
-              </button>
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  :disabled="backlogBusy"
+                  @click="estimateRequirement(req.id, req.text)"
+                >
+                  <AppIcon :name="backlogBusyId === req.id ? 'loader-circle' : 'sparkles'" :size="14" :class="{ 'animate-spin': backlogBusyId === req.id }" />
+                  KI-Schaetzung
+                </button>
+
+                <a
+                  v-if="req.jiraKey"
+                  :href="`https://${settings.atlassianDomain}/browse/${req.jiraKey}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+                >
+                  <AppIcon name="external-link" :size="12" />
+                  {{ req.jiraKey }}
+                </a>
+                <button
+                  v-else
+                  class="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-60 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+                  :disabled="jiraBusy"
+                  @click="pushRequirementToJira(req.id)"
+                >
+                  <AppIcon :name="jiraBusyId === req.id ? 'loader-circle' : 'arrow-up-right'" :size="14" :class="{ 'animate-spin': jiraBusyId === req.id }" />
+                  Nach Jira
+                </button>
+              </div>
             </div>
           </div>
           <p v-else class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
@@ -517,7 +661,8 @@ async function estimateAllRequirements() {
                 <div class="text-[12px] font-bold leading-snug text-slate-800 transition-colors group-hover:text-emerald-700 dark:text-slate-100 dark:group-hover:text-emerald-300">
                   {{ rec.label }}
                 </div>
-                <span class="mt-1.5 inline-flex items-center rounded-md border px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider"
+                <span
+                  class="mt-1.5 inline-flex items-center rounded-md border px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider"
                   :class="{
                     'border-brand bg-brand-soft text-brand dark:text-brand-strong': rec.pillar === 'elicitation',
                     'border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300': rec.pillar === 'documentation',
