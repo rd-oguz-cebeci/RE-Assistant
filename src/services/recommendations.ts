@@ -118,6 +118,10 @@ const RECOMMENDATIONS: Record<string, ToolRecommendation[]> = {
         { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
         { toolId: 'traceability', label: 'Traceability Matrix generieren', icon: 'link', pillar: 'management' },
     ],
+    jira_dashboard: [
+        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'impact', label: 'Change Impact Analyse', icon: 'git-pull-request', pillar: 'management' },
+    ],
     backlog: [
         { toolId: 'export_context', label: 'Export für Claude Code erstellen', icon: 'download', pillar: 'management' },
         { toolId: 'traceability', label: 'Traceability Matrix generieren', icon: 'link', pillar: 'management' },

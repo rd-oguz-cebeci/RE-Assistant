@@ -11,7 +11,7 @@ import { callAi, AiError } from '@/services/ai'
 import { getDemoResponse } from '@/services/demo'
 import { getRecommendations } from '@/services/recommendations'
 import { downloadProjectExport, serializeProjectExport } from '@/services/export'
-import { createJiraIssue, syncProjectToConfluence, AtlassianError } from '@/services/atlassian'
+import { createJiraIssue, syncProjectToConfluence, getJiraProjectIssues, getJiraProjectByKey, AtlassianError } from '@/services/atlassian'
 import AppIcon from './AppIcon.vue'
 import PromptEditor from './PromptEditor.vue'
 
@@ -38,6 +38,7 @@ const loading = ref(false)
 const isModeling = computed(() => props.toolId === 'modeling')
 const isExportTool = computed(() => props.toolId === 'export_context')
 const isBacklogTool = computed(() => props.toolId === 'backlog')
+const isJiraDashboardTool = computed(() => props.toolId === 'jira_dashboard')
 const isFavorite = computed(() => favorites.value.includes(props.toolId))
 const isDemoMode = computed(() => store.demoModeLoaded)
 const recommendations = computed(() => getRecommendations(props.toolId, selectedVariant.value))
@@ -49,6 +50,7 @@ const backlogBusyId = ref<string | null>(null)
 const jiraBusy = ref(false)
 const jiraBusyId = ref<string | null>(null)
 const confluenceBusy = ref(false)
+const jiraDashboardBusy = ref(false)
 
 function firstRequirementText(): string {
   return store.requirements[0]?.text ?? store.tempValReqText
@@ -195,6 +197,13 @@ function resetForTool() {
     return
   }
 
+  if (isJiraDashboardTool.value) {
+    input.value = ''
+    result.value = ''
+    selectedVariant.value = undefined
+    return
+  }
+
   input.value = initialInputForVariant()
   result.value = ''
   selectedVariant.value = variantKeys.value[0]
@@ -211,6 +220,11 @@ async function run() {
     result.value = exportPreview.value
     downloadProjectExport()
     show('re-context.md exportiert.', 'success')
+    return
+  }
+
+  if (isJiraDashboardTool.value) {
+    await refreshJiraDashboard()
     return
   }
 
@@ -408,6 +422,124 @@ async function syncToConfluence() {
     confluenceBusy.value = false
   }
 }
+
+function formatDate(value: string): string {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleDateString('de-DE')
+}
+
+function toMarkdownDashboard(issues: Awaited<ReturnType<typeof getJiraProjectIssues>>): string {
+  const total = issues.length
+  const doneStates = ['done', 'erledigt', 'closed', 'abgeschlossen']
+  const inProgressStates = ['in progress', 'in arbeit', 'progress', 'coding', 'review']
+  const todoStates = ['to do', 'offen', 'open', 'backlog']
+
+  const done = issues.filter((i) => doneStates.some((s) => i.status.toLowerCase().includes(s))).length
+  const inProgress = issues.filter((i) => inProgressStates.some((s) => i.status.toLowerCase().includes(s))).length
+  const todo = issues.filter((i) => todoStates.some((s) => i.status.toLowerCase().includes(s))).length
+  const unknown = total - done - inProgress - todo
+
+  const blocked = issues.filter((i) => /block|blocked|impediment|stuck/i.test(i.summary)).slice(0, 5)
+
+  const statusBuckets = new Map<string, number>()
+  const priorityBuckets = new Map<string, number>()
+  for (const issue of issues) {
+    statusBuckets.set(issue.status, (statusBuckets.get(issue.status) ?? 0) + 1)
+    priorityBuckets.set(issue.priority, (priorityBuckets.get(issue.priority) ?? 0) + 1)
+  }
+
+  const statusRows = Array.from(statusBuckets.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([status, count]) => `| ${status} | ${count} |`)
+    .join('\n')
+
+  const prioRows = Array.from(priorityBuckets.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([prio, count]) => `| ${prio} | ${count} |`)
+    .join('\n')
+
+  const topUpdated = [...issues]
+    .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime())
+    .slice(0, 8)
+    .map((i) => `| [${i.key}](${i.url}) | ${i.issueType} | ${i.status} | ${i.priority} | ${i.assignee} | ${formatDate(i.updated)} |`)
+    .join('\n')
+
+  const blockedSection = blocked.length
+    ? blocked.map((i) => `- [${i.key}](${i.url}) - ${i.summary}`).join('\n')
+    : '- Keine offensichtlichen Blocker anhand Titelstichwörtern gefunden.'
+
+  return [
+    '# Jira Management Dashboard',
+    '',
+    `Projekt: **${settings.atlassianJiraProject}**`,
+    `Stand: **${new Date().toLocaleString('de-DE')}**`,
+    '',
+    '## KPI-Übersicht',
+    '',
+    `- Gesamt-Tickets: **${total}**`,
+    `- Done: **${done}**`,
+    `- In Progress: **${inProgress}**`,
+    `- To Do: **${todo}**`,
+    `- Unklassifiziert: **${unknown}**`,
+    '',
+    '## Status-Verteilung',
+    '',
+    '| Status | Anzahl |',
+    '|---|---:|',
+    statusRows || '| - | 0 |',
+    '',
+    '## Prioritäten',
+    '',
+    '| Priorität | Anzahl |',
+    '|---|---:|',
+    prioRows || '| - | 0 |',
+    '',
+    '## Zuletzt aktualisierte Tickets',
+    '',
+    '| Ticket | Typ | Status | Priorität | Assignee | Updated |',
+    '|---|---|---|---|---|---|',
+    topUpdated || '| - | - | - | - | - | - |',
+    '',
+    '## Potenzielle Blocker',
+    '',
+    blockedSection,
+  ].join('\n')
+}
+
+async function refreshJiraDashboard() {
+  if (!settings.hasAtlassianConfig) {
+    show('Bitte zuerst Atlassian Cloud in den Einstellungen konfigurieren.', 'error')
+    return
+  }
+
+  jiraDashboardBusy.value = true
+  try {
+    const issues = await getJiraProjectIssues(buildAtlassianConfig(), 120)
+    result.value = toMarkdownDashboard(issues)
+
+    if (issues.length === 0) {
+      const currentKey = settings.atlassianJiraProject.trim().toUpperCase()
+      const currentProject = await getJiraProjectByKey(buildAtlassianConfig(), currentKey)
+      const currentExists = Boolean(currentProject)
+
+      if (!currentExists) {
+        show(`0 Tickets: Projekt '${currentKey}' ist per API für den Token nicht sichtbar (oder Key falsch).`, 'error')
+      } else {
+        show(`Dashboard aktualisiert (0 Tickets im Projekt ${currentKey} - ${currentProject?.name}).`, 'success')
+      }
+      return
+    }
+
+    show(`Dashboard aktualisiert (${issues.length} Tickets).`, 'success')
+  } catch (error) {
+    const msg = error instanceof AtlassianError ? error.message : 'Dashboard konnte nicht geladen werden.'
+    show(msg, 'error')
+  } finally {
+    jiraDashboardBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -495,6 +627,22 @@ async function syncToConfluence() {
             {{ store.confluencePageId ? 'Confluence aktualisieren' : 'Nach Confluence' }}
           </button>
         </div>
+      </template>
+
+      <template v-else-if="isJiraDashboardTool">
+        <p class="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+          Liest die aktuellen Tickets aus Jira ein und erzeugt ein Management-Dashboard mit KPIs,
+          Statusverteilung, Prioritäten und potenziellen Blockern.
+        </p>
+
+        <button
+          class="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 py-3.5 text-sm font-semibold text-blue-700 transition-all hover:bg-blue-100 disabled:opacity-60 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+          :disabled="jiraDashboardBusy"
+          @click="refreshJiraDashboard"
+        >
+          <AppIcon :name="jiraDashboardBusy ? 'loader-circle' : 'activity'" :size="18" :class="{ 'animate-spin': jiraDashboardBusy }" />
+          {{ jiraDashboardBusy ? 'Dashboard wird aktualisiert …' : 'Jira-Dashboard aktualisieren' }}
+        </button>
       </template>
 
       <template v-else>

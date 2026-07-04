@@ -56,6 +56,12 @@ export default defineConfig(({ mode }) => {
         server: {
             proxy: atlassianDomain
                 ? {
+                      '/api/atlassian/jira-agile': {
+                          target: `https://${atlassianDomain}`,
+                          changeOrigin: true,
+                          secure: true,
+                          rewrite: (path) => path.replace('/api/atlassian/jira-agile', '/rest/agile/1.0'),
+                      },
                       '/api/atlassian/jira': {
                           target: `https://${atlassianDomain}`,
                           changeOrigin: true,

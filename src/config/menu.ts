@@ -361,6 +361,15 @@ export const menuStructure: MenuSection[] = [
         why: 'Requirements Management sichert die Traceability (Verfolgbarkeit), steuert Versionen und koordiniert Änderungen (Change Requests) systematisch über den gesamten Projektlebenszyklus.',
         children: [
             {
+                id: 'jira_dashboard',
+                category: 'Dashboard',
+                icon: 'activity',
+                label: 'Jira Projekt-Dashboard',
+                desc: 'Liest aktuelle Jira-Tickets im Projekt ein und erzeugt ein Status-Dashboard.',
+                instruction: 'Laden Sie die aktuellen Jira-Issues und erstellen Sie ein Management-Dashboard zum Projektstatus.',
+                why: 'Für Projektleitung und Stakeholder ist ein aktuelles Delivery-Bild essenziell. Ein Ticket-basiertes Dashboard macht Status, Risiken und Engpässe transparent und unterstützt datenbasierte Entscheidungen.',
+            },
+            {
                 id: 'export_context',
                 category: 'Export',
                 icon: 'download',

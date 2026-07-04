@@ -33,9 +33,29 @@ export interface JiraIssueMeta {
     url: string
 }
 
+export interface JiraProjectIssue {
+    id: string
+    key: string
+    summary: string
+    status: string
+    priority: string
+    assignee: string
+    issueType: string
+    created: string
+    updated: string
+    url: string
+}
+
 export interface ConfluencePageMeta {
     id: string
     url: string
+}
+
+export interface AtlassianConnectionDiagnostics {
+    authOk: boolean
+    projectVisible: boolean
+    boardAccessible: boolean
+    message: string
 }
 
 export class AtlassianError extends Error {
@@ -50,7 +70,38 @@ export class AtlassianError extends Error {
 // ---------------------------------------------------------------------------
 
 const JIRA_BASE = '/api/atlassian/jira'
+const JIRA_AGILE_BASE = '/api/atlassian/jira-agile'
 const WIKI_BASE = '/api/atlassian/wiki'
+
+function mapJiraIssueFromFields(
+    domain: string,
+    issue: {
+        id: string
+        key: string
+        fields: {
+            summary?: string
+            status?: { name?: string }
+            priority?: { name?: string }
+            assignee?: { displayName?: string } | null
+            issuetype?: { name?: string }
+            created?: string
+            updated?: string
+        }
+    },
+): JiraProjectIssue {
+    return {
+        id: issue.id,
+        key: issue.key,
+        summary: issue.fields.summary ?? '(ohne Summary)',
+        status: issue.fields.status?.name ?? 'Unknown',
+        priority: issue.fields.priority?.name ?? 'Unknown',
+        assignee: issue.fields.assignee?.displayName ?? 'Unassigned',
+        issueType: issue.fields.issuetype?.name ?? 'Unknown',
+        created: issue.fields.created ?? '',
+        updated: issue.fields.updated ?? '',
+        url: `https://${domain}/browse/${issue.key}`,
+    }
+}
 
 function buildAuth(email: string, token: string): string {
     return `Basic ${btoa(`${email}:${token}`)}`
@@ -202,6 +253,114 @@ export async function getJiraProjects(
     return result.values
 }
 
+/**
+ * Prüft ein Jira-Projekt direkt über den Project-Key.
+ * Liefert null, wenn das Projekt für den Token nicht sichtbar ist.
+ */
+export async function getJiraProjectByKey(
+    config: AtlassianConfig,
+    projectKey: string,
+): Promise<{ key: string; name: string } | null> {
+    const auth = buildAuth(config.email, config.token)
+    try {
+        const result = await apiRequest<{ key: string; name: string }>(
+            `${JIRA_BASE}/project/${encodeURIComponent(projectKey)}`,
+            'GET',
+            auth,
+        )
+        return result
+    } catch (error) {
+        if (error instanceof AtlassianError && /404/.test(error.message)) {
+            return null
+        }
+        throw error
+    }
+}
+
+/**
+ * Liest Issues eines Jira-Projekts für Reporting-/Dashboard-Zwecke aus.
+ */
+export async function getJiraProjectIssues(
+    config: AtlassianConfig,
+    maxResults = 100,
+): Promise<JiraProjectIssue[]> {
+    const auth = buildAuth(config.email, config.token)
+    const query = new URLSearchParams({
+        jql: `project = ${config.jiraProjectKey} ORDER BY updated DESC`,
+        maxResults: String(maxResults),
+        fields: 'summary,status,priority,assignee,issuetype,created,updated',
+    })
+
+    const result = await apiRequest<{
+        issues: Array<{
+            id: string
+            key: string
+            fields: {
+                summary?: string
+                status?: { name?: string }
+                priority?: { name?: string }
+                assignee?: { displayName?: string } | null
+                issuetype?: { name?: string }
+                created?: string
+                updated?: string
+            }
+        }>
+    }>(
+        `${JIRA_BASE}/search/jql?${query.toString()}`,
+        'GET',
+        auth,
+    )
+
+    const mappedFromJql = result.issues.map((issue) => mapJiraIssueFromFields(config.domain, issue))
+    if (mappedFromJql.length > 0) {
+        return mappedFromJql
+    }
+
+    // Fallback: Einige Jira-Setups liefern für das Projekt-JQL keine Ergebnisse,
+    // obwohl Boards und Issues sichtbar sind. Deshalb lesen wir Board-Issues direkt.
+    const boards = await apiRequest<{
+        values: Array<{ id: number; name: string }>
+    }>(
+        `${JIRA_AGILE_BASE}/board?projectKeyOrId=${encodeURIComponent(config.jiraProjectKey)}&maxResults=10`,
+        'GET',
+        auth,
+    )
+
+    if (!boards.values?.length) {
+        return []
+    }
+
+    const unique = new Map<string, JiraProjectIssue>()
+    const boardsToScan = boards.values.slice(0, 3)
+    for (const board of boardsToScan) {
+        const boardIssues = await apiRequest<{
+            issues: Array<{
+                id: string
+                key: string
+                fields: {
+                    summary?: string
+                    status?: { name?: string }
+                    priority?: { name?: string }
+                    assignee?: { displayName?: string } | null
+                    issuetype?: { name?: string }
+                    created?: string
+                    updated?: string
+                }
+            }>
+        }>(
+            `${JIRA_AGILE_BASE}/board/${board.id}/issue?maxResults=${Math.max(20, Math.min(maxResults, 100))}&fields=summary,status,priority,assignee,issuetype,created,updated`,
+            'GET',
+            auth,
+        )
+
+        for (const issue of boardIssues.issues ?? []) {
+            unique.set(issue.key, mapJiraIssueFromFields(config.domain, issue))
+        }
+    }
+
+    return Array.from(unique.values())
+}
+
 // ---------------------------------------------------------------------------
 // Confluence API (REST API v1 – Storage Format)
 // ---------------------------------------------------------------------------
@@ -349,6 +508,73 @@ export async function syncProjectToConfluence(
  * Prüft die Konfiguration durch Abfrage der verfügbaren Projekte.
  * Wirft AtlassianError bei falschen Credentials oder Domain.
  */
-export async function testAtlassianConnection(config: AtlassianConfig): Promise<void> {
-    await getJiraProjects(config)
+export async function testAtlassianConnection(config: AtlassianConfig): Promise<AtlassianConnectionDiagnostics> {
+    const auth = buildAuth(config.email, config.token)
+
+    try {
+        await apiRequest<{ accountId: string }>(`${JIRA_BASE}/myself`, 'GET', auth)
+    } catch (error) {
+        if (error instanceof AtlassianError && /401/.test(error.message)) {
+            return {
+                authOk: false,
+                projectVisible: false,
+                boardAccessible: false,
+                message: 'Authentifizierung fehlgeschlagen (401). Bitte E-Mail und API-Token prüfen.',
+            }
+        }
+        throw error
+    }
+
+    let projectVisible = false
+    try {
+        await apiRequest<{ key: string }>(
+            `${JIRA_BASE}/project/${encodeURIComponent(config.jiraProjectKey)}`,
+            'GET',
+            auth,
+        )
+        projectVisible = true
+    } catch (error) {
+        if (!(error instanceof AtlassianError && /404|403/.test(error.message))) {
+            throw error
+        }
+    }
+
+    let boardAccessible = false
+    try {
+        const boards = await apiRequest<{ values?: Array<{ id: number }> }>(
+            `${JIRA_AGILE_BASE}/board?projectKeyOrId=${encodeURIComponent(config.jiraProjectKey)}&maxResults=1`,
+            'GET',
+            auth,
+        )
+        boardAccessible = (boards.values?.length ?? 0) > 0
+    } catch (error) {
+        if (!(error instanceof AtlassianError && /401|403|404/.test(error.message))) {
+            throw error
+        }
+    }
+
+    if (!projectVisible) {
+        return {
+            authOk: true,
+            projectVisible: false,
+            boardAccessible,
+            message: `Authentifizierung ok, aber Projekt '${config.jiraProjectKey}' ist für den Token nicht sichtbar.`,
+        }
+    }
+
+    if (!boardAccessible) {
+        return {
+            authOk: true,
+            projectVisible: true,
+            boardAccessible: false,
+            message: `Projektzugriff ok, aber keine Boards für '${config.jiraProjectKey}' erreichbar (Board-Rechte prüfen).`,
+        }
+    }
+
+    return {
+        authOk: true,
+        projectVisible: true,
+        boardAccessible: true,
+        message: 'Verbindung erfolgreich: Auth, Projekt und Boardzugriff sind ok.',
+    }
 }

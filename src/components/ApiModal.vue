@@ -202,8 +202,14 @@ async function testConnection() {
 
   atlTesting.value = true
   try {
-    await testAtlassianConnection({ domain, email, token, jiraProjectKey: jiraProject, confluenceSpaceKey: atlConfluenceSpace.value })
-    show('Verbindung erfolgreich! Jira-Projekte erreichbar.', 'success')
+    const diagnostics = await testAtlassianConnection({
+      domain,
+      email,
+      token,
+      jiraProjectKey: jiraProject,
+      confluenceSpaceKey: atlConfluenceSpace.value,
+    })
+    show(diagnostics.message, diagnostics.authOk && diagnostics.projectVisible ? 'success' : 'error')
   } catch (error) {
     const msg = error instanceof AtlassianError ? error.message : 'Verbindung fehlgeschlagen.'
     show(msg, 'error')
