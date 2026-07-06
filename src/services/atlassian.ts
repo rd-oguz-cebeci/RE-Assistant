@@ -277,6 +277,63 @@ export async function getJiraProjectByKey(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Jira Issue Detail (für Qualitätsprüfung)
+// ---------------------------------------------------------------------------
+
+export interface JiraIssueDetail {
+    key: string
+    summary: string
+    description: string
+    status: string
+    issueType: string
+    url: string
+}
+
+function adfToPlainText(node: unknown): string {
+    if (!node || typeof node !== 'object') return ''
+    const n = node as { type?: string; text?: string; content?: unknown[] }
+    if (n.type === 'text') return n.text ?? ''
+    if (Array.isArray(n.content)) {
+        const joined = n.content.map(adfToPlainText).join('')
+        if (n.type === 'paragraph') return joined + '\n'
+        return joined
+    }
+    return ''
+}
+
+/**
+ * Lädt ein einzelnes Jira-Issue mit Beschreibung (für die KI-Qualitätsprüfung).
+ */
+export async function getJiraIssueDetail(
+    config: AtlassianConfig,
+    issueKey: string,
+): Promise<JiraIssueDetail> {
+    const auth = buildAuth(config.email, config.token)
+    const result = await apiRequest<{
+        key: string
+        fields: {
+            summary?: string
+            description?: unknown
+            status?: { name?: string }
+            issuetype?: { name?: string }
+        }
+    }>(
+        `${JIRA_BASE}/issue/${encodeURIComponent(issueKey)}?fields=summary,description,status,issuetype`,
+        'GET',
+        auth,
+    )
+    const descText = adfToPlainText(result.fields.description).trim()
+    return {
+        key: result.key,
+        summary: result.fields.summary ?? '',
+        description: descText,
+        status: result.fields.status?.name ?? 'Unknown',
+        issueType: result.fields.issuetype?.name ?? 'Unknown',
+        url: `https://${config.domain}/browse/${result.key}`,
+    }
+}
+
 /**
  * Liest Issues eines Jira-Projekts für Reporting-/Dashboard-Zwecke aus.
  */

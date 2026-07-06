@@ -264,6 +264,15 @@ export const menuStructure: MenuSection[] = [
                     "System-Prompt:\nRolle: Senior QA. Wende strenges 'Chain-of-Thought' an: 1. Isoliere Sätze, 2. Prüfe auf IREB-Smells (Weichmacher, Universalquantoren, Nominalisierung, unklare Bedingungen), 3. Prüfe Passiv, 4. Smells zusammenfassen, 5. Verbesserung vorschlagen.\n\nUser-Prompt:\nAnforderung: [Gewählte Anforderung]",
             },
             {
+                id: 'jira_quality',
+                category: 'Jira Review',
+                icon: 'search-check',
+                label: 'Jira-Ticket-Review',
+                desc: 'Jira-Tickets importieren und mit KI auf IREB-Qualität prüfen.',
+                instruction: 'Laden Sie Jira-Tickets und prüfen Sie deren RE-Qualität automatisch.',
+                why: 'Validierung und Verifikation prüfen, ob Anforderungen verständlich, vollständig und testbar sind. Jira-Tickets aus externen Quellen brauchen genau diesen Review, bevor sie als belastbare Anforderungen in Umsetzung oder Baseline gehen.',
+            },
+            {
                 id: 'tests',
                 category: 'Prüfung',
                 icon: 'beaker',
@@ -362,12 +371,12 @@ export const menuStructure: MenuSection[] = [
         children: [
             {
                 id: 'jira_dashboard',
-                category: 'Dashboard',
+                category: 'Health',
                 icon: 'activity',
-                label: 'Jira Projekt-Dashboard',
-                desc: 'Liest aktuelle Jira-Tickets im Projekt ein und erzeugt ein Status-Dashboard.',
-                instruction: 'Laden Sie die aktuellen Jira-Issues und erstellen Sie ein Management-Dashboard zum Projektstatus.',
-                why: 'Für Projektleitung und Stakeholder ist ein aktuelles Delivery-Bild essenziell. Ein Ticket-basiertes Dashboard macht Status, Risiken und Engpässe transparent und unterstützt datenbasierte Entscheidungen.',
+                label: 'Jira RE-Health Dashboard',
+                desc: 'Prüft Jira-Tickets auf Traceability, Review-Bedarf und Anforderungsstatus.',
+                instruction: 'Laden Sie die aktuellen Jira-Issues und erstellen Sie ein RE-Health-Dashboard.',
+                why: 'Requirements Management sichert Nachvollziehbarkeit, Abdeckung und Änderbarkeit. Ein RE-Health-Dashboard zeigt deshalb nicht nur Delivery-Status, sondern vor allem fehlende Verknüpfungen, Review-Kandidaten und Traceability-Lücken.',
             },
             {
                 id: 'export_context',
@@ -382,10 +391,10 @@ export const menuStructure: MenuSection[] = [
                 id: 'backlog',
                 category: 'Backlog',
                 icon: 'list-todo',
-                label: 'Backlog & Prio',
-                desc: 'Anforderungen verwalten und durch KI schätzen lassen.',
-                instruction: 'Klicken Sie bei Anforderungen auf "KI-Schätzung".',
-                why: 'Ohne harte Priorisierung (z.B. MoSCoW, Kano) weiß die Entwicklung nicht, welche Features essenziell sind, wenn am Ende des Projekts Zeit oder Budget knapp werden.',
+                label: 'Backlog, Prio & Jira-Übergabe',
+                desc: 'Anforderungen verwalten, priorisieren und nach Jira überführen.',
+                instruction: 'Schätzen Sie Anforderungen und übergeben Sie freigegebene Einträge nach Jira.',
+                why: 'Nach der Dokumentation werden Anforderungen im Management priorisiert, versioniert und in die Umsetzung übergeben. Jira ist hier das Zielsystem für traceable Umsetzung, nicht der Ort der ursprünglichen Ermittlung.',
                 promptPattern:
                     'System-Prompt:\nSchätze die Anforderung ein. Output exakt im Format: [Komplexität] | [MoSCoW]\n\nUser-Prompt:\nAnforderung: [Gewählte Anforderung]',
             },

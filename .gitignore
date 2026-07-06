@@ -23,3 +23,6 @@ npm-debug.log*
 # Vite / TS cache
 *.tsbuildinfo
 .vite/
+
+# Local planning docs
+JIRA_CONFLUENCE_INTEGRATION_PLAN.md

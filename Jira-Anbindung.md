@@ -1,152 +1,230 @@
-# Jira und Confluence Anbindung - Umgesetzte Features
+# Jira & Confluence Anbindung – Use Cases, How-To und Sinn dahinter
 
-Dieses Dokument beschreibt alle Erweiterungen, die für die Atlassian-Anbindung im RE-Assistant umgesetzt wurden.
+Der RE-Assistent integriert Atlassian Jira und Confluence entlang von drei klar abgegrenzten
+Requirements-Engineering-Use-Cases. Jeder Use Case ist einer der vier IREB-Säulen zugeordnet
+und hat einen fachlich begründeten Zweck – kein Feature ist hier nur „weil man Jira eben hat".
 
-## 1. Atlassian Konfiguration in der App
+---
 
-Kurzbeschreibung:
-Nutzer koennen Jira und Confluence direkt in der App konfigurieren.
+## Voraussetzungen
 
-Umgesetzt:
-- Neue Konfigurationsoption Atlassian Cloud (Jira + Confluence) im KI-Anbindungs-Modal
-- Felder fuer Domain, E-Mail, API-Token, Jira-Projektschluessel und Confluence-Space
-- Verbindungstest direkt im Modal
-- Speicherung der Konfiguration im lokalen Browser (localStorage)
+Bevor du einen der Use Cases nutzen kannst, muss Atlassian Cloud einmalig konfiguriert werden:
 
-Nutzen:
-Keine manuelle Code-Anpassung mehr noetig, Konfiguration ist fuer Pilotnutzer einfach bedienbar.
+1. In der App oben auf das **Schlüssel-Symbol** klicken.
+2. In der Auswahl **„Atlassian Cloud (Jira + Confluence)"** wählen.
+3. Felder ausfüllen:
+   - **Atlassian-Domain** (ohne `https://`), z. B. `meinefirma.atlassian.net`
+   - **E-Mail** des Atlassian-Accounts
+   - **API-Token** (erstellen unter: https://id.atlassian.com/manage-profile/security/api-tokens)
+   - **Jira-Projektschlüssel**, z. B. `REQ`
+   - **Confluence-Space-Key** (optional), z. B. `RE`
+4. **„Verbindung testen"** ausführen – die Diagnose zeigt Auth, Projektsichtbarkeit und Board-Zugriff getrennt.
+5. **„Speichern"**.
 
-## 2. Persistente Atlassian Settings
+> **Lokal (npm run dev):** Zusätzlich `VITE_ATLASSIAN_DOMAIN=meinefirma.atlassian.net` in `.env.local` eintragen.
+> Der lokale Vite-Dev-Proxy routet alle `/api/atlassian/*`-Anfragen darüber.
+> Credentials werden lokal im Browser-`localStorage` gespeichert – kein Backend nötig.
 
-Kurzbeschreibung:
-Alle Atlassian-Zugangsdaten und Zielparameter werden dauerhaft im Settings-Store gehalten.
+---
 
-Umgesetzt:
-- Erweiterung des Settings-Store um Atlassian-Domain, E-Mail, Token, Jira-Projekt, Confluence-Space
-- Getter fuer Konfigurationsvollstaendigkeit
-- Setter zum Speichern und Normalisieren (z. B. Uppercase fuer Keys)
+## Use Case 1 – Jira-Übergabe (Management)
 
-Nutzen:
-Konfiguration bleibt ueber Reloads erhalten und steht allen Jira/Confluence-Funktionen zentral zur Verfuegung.
+### Worum geht es?
 
-## 3. Lokaler Atlassian Proxy ueber Vite
+Anforderungen, die im RE-Assistenten ermittelt, dokumentiert und validiert wurden,
+werden als einzelner, abschließender Schritt nach Jira übergeben.
+Jira ist dabei das **Zielsystem für die Umsetzungssteuerung**, nicht der Ort der Anforderungsermittlung.
 
-Kurzbeschreibung:
-REST-Aufrufe an Atlassian laufen ueber lokale Proxy-Routen.
+### Warum nach IREB?
 
-Umgesetzt:
-- Proxy-Route fuer Jira REST v3
-- Proxy-Route fuer Jira Agile REST v1.0
-- Proxy-Route fuer Confluence REST
-- Nutzung der Umgebungsvariable VITE_ATLASSIAN_DOMAIN
-- Korrektur der Proxy-Reihenfolge, damit jira-agile nicht von jira ueberschrieben wird
+IREB trennt Anforderungsermittlung, -dokumentation und -management klar voneinander.
+Erst wenn eine Anforderung formuliert, validiert und priorisiert ist, geht sie in die Umsetzungssteuerung.
+Eine direkte Übergabe nach Jira aus dem Backlog stellt sicher, dass nur „reife" Anforderungen
+im Entwicklungs-Ticket-System landen – nicht Rohnotizen oder ungeprüfte Entwürfe.
+Die gespeicherte Verknüpfung (Jira-Key ↔ Requirement-ID) sichert die Pre-RS-Traceability.
 
-Nutzen:
-Browserseitige Integration ist in der lokalen Entwicklungsumgebung moeglich.
+### Workflow
 
-## 4. Jira Issue Erstellung aus dem Backlog
+```
+Ermittlung → Dokumentation → Validierung → Backlog & Jira-Übergabe
+```
 
-Kurzbeschreibung:
-Anforderungen aus dem Backlog koennen als Jira-Issues angelegt werden.
+1. Anforderungen im Assistenten erstellen, z. B. über **„Natürlichsprachlich"** in der Dokumentation.
+2. Anforderungen validieren (Smells, DoR, BVA, Perspektiven).
+3. In den Bereich **„Management"** wechseln.
+4. Tool **„Backlog, Prio & Jira-Übergabe"** öffnen.
+5. Optional: Anforderungen per KI schätzen lassen (Komplexität, MoSCoW).
+6. Einzelne Anforderung: **„Nach Jira übergeben"** klicken.
+   Oder alle noch nicht übergebenen: **„Jira-Übergabe"** klicken.
 
-Umgesetzt:
-- Einzel-Export einer Anforderung nach Jira
-- Batch-Export aller noch nicht synchronisierten Anforderungen
-- Mapping von Requirement-Feldern auf Jira-Issue-Felder
-- Speicherung des erzeugten Jira-Keys je Requirement
-- Direkter Link auf das Jira-Issue in der Backlog-Ansicht
+### Was passiert technisch?
 
-Nutzen:
-RE-Ergebnisse lassen sich ohne Medienbruch in Jira ueberfuehren.
+- Jira-Issue wird als **Story** angelegt.
+- Summary: `[REQ-003] Das System muss …` (ID + gekürzter Anforderungstext).
+- Description: vollständiger Anforderungstext.
+- Labels: `ireb-re-assistant`, optional Typ und Komplexität.
+- Priorität: MoSCoW wird gemappt – Must → Highest, Should → High, Could → Medium, Won't → Low.
+- Der zurückgelieferte **Jira-Key** wird am Requirement gespeichert.
+- Bereits übergebene Anforderungen werden beim nächsten Batch-Lauf übersprungen.
 
-## 5. Confluence Sync als Projektdokumentation
+### Ergebnis
 
-Kurzbeschreibung:
-Der aktuelle Projektstand kann als Confluence-Seite erstellt und aktualisiert werden.
+Jedes übergebene Requirement zeigt in der Backlog-Ansicht einen direkten Link auf das Jira-Issue.
+Das RE-Health-Dashboard (Use Case 3) kann danach die Traceability-Abdeckung messen.
 
-Umgesetzt:
-- Erstellung einer Confluence-Seite beim ersten Sync
-- Upsert-Logik fuer Folgeaufrufe (Update mit Versionsinkrement)
-- Speicherung der Confluence-Page-ID im Projektstore
-- Sync aus Export-Kontext mit Vision, Stakeholdern, Personas, Anforderungen und Glossar
+---
 
-Nutzen:
-Ein lebendes Projektdokument entsteht automatisch und bleibt aktuell.
+## Use Case 2 – Jira-Ticket-Review (Validierung)
 
-## 6. Jira Projekt-Dashboard als neues Management-Tool
+### Worum geht es?
 
-Kurzbeschreibung:
-Neues Tool in der Management-Saeule, das Jira-Tickets einliest und Kennzahlen erzeugt.
+Bestehende Jira-Tickets aus dem Projekt werden in den Assistenten geladen
+und einzeln durch die KI auf IREB-Qualität geprüft.
+Dieser Use Case ist besonders nützlich, wenn Tickets **nicht** aus dem RE-Assistenten stammen,
+z. B. weil sie direkt in Jira angelegt wurden, von Entwicklern kamen oder aus einem Legacy-System migriert wurden.
 
-Umgesetzt:
-- Neues Tool Jira Projekt-Dashboard in der Menuestruktur
-- Einlesen aktueller Tickets des Jira-Projekts
-- KPI-Berechnung: Gesamt, Done, In Progress, To Do, Unklassifiziert
-- Verteilungen nach Status und Prioritaet
-- Liste zuletzt aktualisierter Tickets
-- Heuristische Blocker-Erkennung
+### Warum nach IREB?
 
-Nutzen:
-Projektleitung bekommt direkt in der App ein Management-Bild zum aktuellen Umsetzungsstand.
+Jira-Tickets sind meistens keine sauberen IREB-Anforderungen. Sie enthalten häufig:
+- Weichmacher und Universalquantoren („immer", „schnell", „benutzerfreundlich")
+- fehlende Bedingungen, Akteure oder Prozessworte
+- keine ableitbaren Abnahmekriterien
+- unklare Formulierungen im Passiv
 
-## 7. Jira API Migration und Stabilisierung
+IREB fordert, dass Anforderungen eindeutig, vollständig, prüfbar, konsistent und notwendig sind.
+Ein strukturierter Review bevor ein Ticket in den Sprint geht, ist ein methodisches Quality Gate.
 
-Kurzbeschreibung:
-Anpassungen fuer Atlassian API-Aenderungen und robuste Datenermittlung.
+### Workflow
 
-Umgesetzt:
-- Migration von Search-Endpunkt auf /rest/api/3/search/jql
-- Direkter Projektcheck ueber /project/{key}
-- Fallback auf Board-Issues ueber Jira Agile API, wenn JQL 0 Ergebnisse liefert
+```
+Jira-Tickets laden → je Ticket: Qualität prüfen → Ticket in Jira manuell nachbessern
+```
 
-Nutzen:
-Hoehere Zuverlaessigkeit trotz Jira-API-Umstellungen und unterschiedlicher Projekt-/Board-Setups.
+1. In den Bereich **„Validierung"** wechseln.
+2. Tool **„Jira-Ticket-Review"** öffnen.
+3. **„Jira-Tickets laden"** klicken (lädt bis zu 50 aktuelle Tickets aus dem konfigurierten Projekt).
+4. Bei einem Ticket **„Qualität prüfen"** klicken.
+5. Die KI zeigt:
+   - Checkliste ✅/❌ für Klarheit, Vollständigkeit, Testbarkeit und IREB-Qualitätskriterien
+   - konkrete Verbesserungsvorschläge je Punkt
+6. Ticket in Jira manuell anpassen.
 
-## 8. Verbesserte Verbindungsdiagnose
+### Was passiert technisch?
 
-Kurzbeschreibung:
-Der Verbindungstest liefert jetzt konkrete Ursachen statt generischer Fehler.
+- Der Assistent ruft `GET /rest/api/3/issue/{key}` ab, um Titel und Beschreibung zu laden.
+- Die Beschreibung liegt im Atlassian Document Format (ADF) vor und wird in Klartext gewandelt.
+- Falls die Beschreibung nicht geladen werden kann, wird nur der Ticket-Titel geprüft
+  (ein Hinweis dazu erscheint im Ergebnis).
+- Der KI-Prompt prüft: Smells & Weichmacher, Vollständigkeit (Akteur, Prozesswort, Objekt),
+  Testbarkeit (ableitbare Abnahmekriterien), IREB-Qualitätskriterien (Adäquat, Notwendig, Eindeutig, Vollständig, Prüfbar).
 
-Umgesetzt:
-- Getrennte Diagnose fuer Authentifizierung, Projektsichtbarkeit und Boardzugriff
-- Praezise Rueckmeldung im Modal (z. B. Auth ok, aber Projekt nicht sichtbar)
+### Ergebnis
 
-Nutzen:
-Schnellere Fehleranalyse bei 401, 403, 404 und Rollen-/Berechtigungsproblemen.
+Für jedes geprüfte Ticket erscheint das KI-Review inline unter dem Ticket-Titel.
+Die Ergebnisse sind nicht persistent – sie dienen als Arbeitshilfe während des Review-Meetings
+oder zur eigenen Vorbereitung. Korrekturen werden direkt in Jira vorgenommen.
 
-## 9. Erweiterungen im Projektmodell
+---
 
-Kurzbeschreibung:
-Das interne Datenmodell wurde fuer Jira/Confluence-Verknuepfung erweitert.
+## Use Case 3 – Jira RE-Health Dashboard (Management)
 
-Umgesetzt:
-- Requirement um jiraKey erweitert
-- Projektstate um confluencePageId erweitert
-- Neue Store-Aktionen zum Setzen von jiraKey und confluencePageId
+### Worum geht es?
 
-Nutzen:
-Nachvollziehbare Verknuepfung zwischen RE-Artefakten und externen Atlassian-Objekten.
+Das Dashboard liest aktuelle Jira-Tickets ein und bewertet sie aus Requirements-Management-Sicht.
+Es zeigt nicht nur Delivery-Status (Done/In Progress/To Do), sondern vor allem:
+- Welche Jira-Tickets haben **keine nachvollziehbare RE-Herkunft** (keine Traceability)?
+- Welche Tickets sehen nach **methodischer Nacharbeit** aus (schwache Titel)?
+- Wie hoch ist die **Traceability-Abdeckung** gegenüber den im Assistenten gespeicherten Anforderungen?
 
-## 10. Export-Erweiterung
+### Warum nach IREB?
 
-Kurzbeschreibung:
-Der Markdown-Export enthaelt nun Jira-Bezug.
+Requirements Management sichert Nachvollziehbarkeit (Traceability), Vollständigkeit und Änderbarkeit.
+Ein Jira-Projekt mit vielen Tickets, die keiner dokumentierten Anforderung zugeordnet sind,
+ist ein klares Traceability-Risiko: Woher kam dieses Feature? Warum ist es priorisiert?
+Welche Anforderung deckt es ab? Das Dashboard macht diese Lücken sichtbar.
 
-Umgesetzt:
-- Jira-Spalte im Anforderungstableau des Exports
+### Workflow
 
-Nutzen:
-Traceability bleibt auch im exportierten Kontext erhalten.
+```
+RE-Health aktualisieren → Traceability-Lücken analysieren → Review-Kandidaten prüfen
+```
 
-## 11. Dokumentation und Betriebsfaehigkeit
+1. In den Bereich **„Management"** wechseln.
+2. Tool **„Jira RE-Health Dashboard"** öffnen.
+3. **„RE-Health aktualisieren"** klicken.
+4. Das Dashboard zeigt:
+   - **RE-Health Übersicht:** Gesamttickets, verknüpfte, Lücken, Review-Kandidaten, Done/In Progress/To Do
+   - **Traceability-Lücken:** Tickets ohne Verknüpfung zu einer Anforderung im Assistenten
+   - **Kandidaten für IREB-Review:** Tickets mit kurzen, unklaren oder generischen Titeln
+   - **Status-Verteilung** und **Prioritäten-Verteilung**
+   - **Zuletzt aktualisierte Tickets**
+   - **Potenzielle Blocker** (heuristische Erkennung über Stichwörter im Titel)
 
-Kurzbeschreibung:
-Dokumentation fuer Setup, Test und Troubleshooting wurde erweitert.
+### Was passiert technisch?
 
-Umgesetzt:
-- README mit kompletter Anleitung fuer Jira/Confluence-Setup
-- Smoke-Test Ablauf
-- Troubleshooting fuer Node, Proxy und Atlassian-Auth
+- Der Assistent lädt bis zu 120 Jira-Issues über JQL (`project = KEY ORDER BY updated DESC`).
+- Er vergleicht die Jira-Keys mit den gespeicherten `jiraKey`-Feldern der Anforderungen im Assistenten.
+- Traceability-Lücken = Jira-Tickets ohne passenden `jiraKey` im lokalen Backlog.
+- Review-Kandidaten werden heuristisch erkannt: Titel kürzer als 25 Zeichen, generische Begriffe
+  (Todo, TBD, Fix, Optimieren, …) oder fehlende RE-Signalworte (muss, soll, als, damit, …).
+- Das Ergebnis wird als Markdown-Dashboard im Ergebnis-Bereich angezeigt.
 
-Nutzen:
-Pilot-Teams koennen die Integration strukturiert einrichten und testen.
+### Ergebnis
+
+Der RE sieht auf einen Blick, wie gut der aktuelle Jira-Stand mit dem erarbeiteten RE-Kontext verknüpft ist.
+Das Dashboard ist kein Delivery-Statusbericht für die Projektleitung, sondern ein methodisches
+Controlling-Instrument für den Requirements Engineer.
+
+---
+
+## Confluence – Projektdokumentation als Baseline
+
+### Worum geht es?
+
+Confluence dient als externes Dokumentationsziel für den gesamten IREB-Projektkontext.
+Der Assistent kann Vision, Systemkontext, Stakeholder, Personas, Anforderungen und Glossar
+als eine strukturierte Confluence-Seite veröffentlichen.
+
+### Warum nach IREB?
+
+IREB fordert, dass Anforderungsdokumentationen dauerhaft, verständlich und für alle
+Beteiligten zugänglich sind. Confluence ist in vielen Unternehmen das gemeinsame Wissenssystem.
+Der Sync erzeugt aus dem interaktiv erarbeiteten RE-Kontext eine lesbare, verlinkbare Baseline –
+kein manuelles Kopieren, kein Medienbruch.
+
+### Workflow
+
+1. In den Bereich **„Management"** wechseln.
+2. Tool **„Export für Claude Code"** öffnen.
+3. **„Nach Confluence"** klicken.
+4. Beim ersten Aufruf wird eine neue Seite im konfigurierten Space angelegt.
+5. Bei Folgeaufrufen wird die bestehende Seite aktualisiert (Upsert mit Versionsinkrement).
+
+### Was passiert technisch?
+
+- Die Seite enthält: Projektvision, Stakeholder, Personas, Anforderungstabelle (mit Jira-Links) und Glossar.
+- Der Assistent speichert die zurückgelieferte **Page-ID** im Projektstate, um Folge-Updates zu ermöglichen.
+- Der Confluence-Sync läuft über `POST /wiki/rest/api/content` bzw. `PUT /wiki/rest/api/content/{id}`.
+
+### Ergebnis
+
+Die Confluence-Seite ist die lebende Projektdokumentation. Sie wird immer dann aktualisiert,
+wenn neue Anforderungen dazukommen, das Glossar wächst oder der Kontext sich ändert.
+Sie ist die Baseline, auf die sich alle Projektbeteiligten beziehen können.
+
+---
+
+## Zusammenfassung: IREB-Flow mit Atlassian-Anbindung
+
+```
+① Ermittlung          → Ziele, Stakeholder, Personas, Interviews, Rohtext
+② Dokumentation       → Anforderungen formulieren, Glossar, UML-Modelle
+                         → Confluence als Baseline veröffentlichen
+③ Validierung         → Smells, Tests, DoR, BVA
+                         → Jira-Ticket-Review für fremde Tickets
+④ Management          → Backlog, Priorisierung, Jira-Übergabe
+                         → RE-Health Dashboard für Traceability-Controlling
+```
+
+Jira ist in diesem Modell kein Ersatz für das RE – es ist das Übergabe- und Steuerungssystem,
+das erst dann benutzt wird, wenn Anforderungen methodisch reif sind.

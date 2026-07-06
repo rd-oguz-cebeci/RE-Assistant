@@ -56,7 +56,7 @@ const RECOMMENDATIONS: Record<string, ToolRecommendation[]> = {
     ],
     workshop: [
         { toolId: 'extract_req', label: 'Anforderungen extrahieren', icon: 'zap', pillar: 'documentation' },
-        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'backlog', label: 'Jira-Übergabe vorbereiten', icon: 'list-todo', pillar: 'management' },
     ],
     extract_req: [
         { toolId: 'formulate', label: 'Anforderungen sauber formulieren', icon: 'file-edit', pillar: 'documentation' },
@@ -96,7 +96,7 @@ const RECOMMENDATIONS: Record<string, ToolRecommendation[]> = {
     ],
     conflict: [
         { toolId: 'dor', label: 'Ready-Check durchführen', icon: 'list-checks', pillar: 'validation' },
-        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'backlog', label: 'Jira-Übergabe vorbereiten', icon: 'list-todo', pillar: 'management' },
     ],
     devil: [
         { toolId: 'compliance', label: 'Compliance-Check durchführen', icon: 'scale', pillar: 'validation' },
@@ -104,22 +104,22 @@ const RECOMMENDATIONS: Record<string, ToolRecommendation[]> = {
     ],
     compliance: [
         { toolId: 'dor', label: 'Ready-Check durchführen', icon: 'list-checks', pillar: 'validation' },
-        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'backlog', label: 'Jira-Übergabe vorbereiten', icon: 'list-todo', pillar: 'management' },
     ],
     dor: [
         { toolId: 'bva', label: 'BVA & EP ableiten', icon: 'sliders', pillar: 'validation' },
-        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'backlog', label: 'Jira-Übergabe vorbereiten', icon: 'list-todo', pillar: 'management' },
     ],
     bva: [
-        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'backlog', label: 'Jira-Übergabe vorbereiten', icon: 'list-todo', pillar: 'management' },
         { toolId: 'dor', label: 'Definition of Ready prüfen', icon: 'list-checks', pillar: 'validation' },
     ],
     export_context: [
-        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'backlog', label: 'Jira-Übergabe vorbereiten', icon: 'list-todo', pillar: 'management' },
         { toolId: 'traceability', label: 'Traceability Matrix generieren', icon: 'link', pillar: 'management' },
     ],
     jira_dashboard: [
-        { toolId: 'backlog', label: 'Backlog & Prio öffnen', icon: 'list-todo', pillar: 'management' },
+        { toolId: 'backlog', label: 'Jira-Übergabe vorbereiten', icon: 'list-todo', pillar: 'management' },
         { toolId: 'impact', label: 'Change Impact Analyse', icon: 'git-pull-request', pillar: 'management' },
     ],
     backlog: [

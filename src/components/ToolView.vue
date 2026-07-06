@@ -11,7 +11,8 @@ import { callAi, AiError } from '@/services/ai'
 import { getDemoResponse } from '@/services/demo'
 import { getRecommendations } from '@/services/recommendations'
 import { downloadProjectExport, serializeProjectExport } from '@/services/export'
-import { createJiraIssue, syncProjectToConfluence, getJiraProjectIssues, getJiraProjectByKey, AtlassianError } from '@/services/atlassian'
+import { createJiraIssue, syncProjectToConfluence, getJiraProjectIssues, getJiraProjectByKey, getJiraIssueDetail, AtlassianError } from '@/services/atlassian'
+import type { JiraProjectIssue } from '@/services/atlassian'
 import AppIcon from './AppIcon.vue'
 import PromptEditor from './PromptEditor.vue'
 
@@ -39,6 +40,7 @@ const isModeling = computed(() => props.toolId === 'modeling')
 const isExportTool = computed(() => props.toolId === 'export_context')
 const isBacklogTool = computed(() => props.toolId === 'backlog')
 const isJiraDashboardTool = computed(() => props.toolId === 'jira_dashboard')
+const isJiraQualityTool = computed(() => props.toolId === 'jira_quality')
 const isFavorite = computed(() => favorites.value.includes(props.toolId))
 const isDemoMode = computed(() => store.demoModeLoaded)
 const recommendations = computed(() => getRecommendations(props.toolId, selectedVariant.value))
@@ -51,6 +53,12 @@ const jiraBusy = ref(false)
 const jiraBusyId = ref<string | null>(null)
 const confluenceBusy = ref(false)
 const jiraDashboardBusy = ref(false)
+
+// Jira Quality tool state
+const jiraQualityIssues = ref<JiraProjectIssue[]>([])
+const jiraQualityBusy = ref(false)
+const jiraQualityCheckBusy = ref<string | null>(null)
+const jiraQualityResults = ref<Record<string, string>>({})
 
 function firstRequirementText(): string {
   return store.requirements[0]?.text ?? store.tempValReqText
@@ -201,6 +209,15 @@ function resetForTool() {
     input.value = ''
     result.value = ''
     selectedVariant.value = undefined
+    return
+  }
+
+  if (isJiraQualityTool.value) {
+    input.value = ''
+    result.value = ''
+    selectedVariant.value = undefined
+    jiraQualityIssues.value = []
+    jiraQualityResults.value = {}
     return
   }
 
@@ -442,6 +459,19 @@ function toMarkdownDashboard(issues: Awaited<ReturnType<typeof getJiraProjectIss
   const unknown = total - done - inProgress - todo
 
   const blocked = issues.filter((i) => /block|blocked|impediment|stuck/i.test(i.summary)).slice(0, 5)
+  const linkedJiraKeys = new Set(store.requirements.map((req) => req.jiraKey).filter(Boolean))
+  const linkedIssues = issues.filter((issue) => linkedJiraKeys.has(issue.key))
+  const unlinkedIssues = issues.filter((issue) => !linkedJiraKeys.has(issue.key)).slice(0, 10)
+  const reviewCandidates = issues
+    .filter((issue) => {
+      const summary = issue.summary.trim()
+      return (
+        summary.length < 25 ||
+        /\b(todo|tbd|unklar|divers|misc|fix|anpassen|optimieren|verbessern|schnell|einfach)\b/i.test(summary) ||
+        !/(muss|soll|kann|als |damit|wenn|falls|user story|akzeptanz|acceptance)/i.test(summary)
+      )
+    })
+    .slice(0, 10)
 
   const statusBuckets = new Map<string, number>()
   const priorityBuckets = new Map<string, number>()
@@ -470,19 +500,40 @@ function toMarkdownDashboard(issues: Awaited<ReturnType<typeof getJiraProjectIss
     ? blocked.map((i) => `- [${i.key}](${i.url}) - ${i.summary}`).join('\n')
     : '- Keine offensichtlichen Blocker anhand Titelstichwörtern gefunden.'
 
+  const unlinkedSection = unlinkedIssues.length
+    ? unlinkedIssues.map((i) => `- [${i.key}](${i.url}) - ${i.summary}`).join('\n')
+    : '- Alle geladenen Jira-Tickets sind mit Anforderungen im RE-Assistenten verknüpft.'
+
+  const reviewSection = reviewCandidates.length
+    ? reviewCandidates.map((i) => `- [${i.key}](${i.url}) - ${i.summary}`).join('\n')
+    : '- Keine offensichtlichen Review-Kandidaten anhand der Ticket-Titel gefunden.'
+
+  const traceabilityPercent = total > 0 ? Math.round((linkedIssues.length / total) * 100) : 0
+
   return [
-    '# Jira Management Dashboard',
+    '# Jira RE-Health Dashboard',
     '',
     `Projekt: **${settings.atlassianJiraProject}**`,
     `Stand: **${new Date().toLocaleString('de-DE')}**`,
     '',
-    '## KPI-Übersicht',
+    '## RE-Health Übersicht',
     '',
     `- Gesamt-Tickets: **${total}**`,
+    `- Mit RE-Anforderung verknüpft: **${linkedIssues.length}** (${traceabilityPercent}%)`,
+    `- Ohne RE-Traceability: **${Math.max(total - linkedIssues.length, 0)}**`,
+    `- Review-Kandidaten: **${reviewCandidates.length}**`,
     `- Done: **${done}**`,
     `- In Progress: **${inProgress}**`,
     `- To Do: **${todo}**`,
     `- Unklassifiziert: **${unknown}**`,
+    '',
+    '## Traceability-Lücken',
+    '',
+    unlinkedSection,
+    '',
+    '## Kandidaten für IREB-Review',
+    '',
+    reviewSection,
     '',
     '## Status-Verteilung',
     '',
@@ -538,6 +589,62 @@ async function refreshJiraDashboard() {
     show(msg, 'error')
   } finally {
     jiraDashboardBusy.value = false
+  }
+}
+
+async function loadJiraQualityIssues() {
+  if (!settings.hasAtlassianConfig) {
+    show('Bitte zuerst Atlassian Cloud in den Einstellungen konfigurieren.', 'error')
+    return
+  }
+  jiraQualityBusy.value = true
+  try {
+    jiraQualityIssues.value = await getJiraProjectIssues(buildAtlassianConfig(), 50)
+    jiraQualityResults.value = {}
+    if (!jiraQualityIssues.value.length) {
+      show('Keine Tickets im Projekt gefunden.', 'error')
+    } else {
+      show(`${jiraQualityIssues.value.length} Tickets geladen.`, 'success')
+    }
+  } catch (error) {
+    const msg = error instanceof AtlassianError ? error.message : 'Tickets konnten nicht geladen werden.'
+    show(msg, 'error')
+  } finally {
+    jiraQualityBusy.value = false
+  }
+}
+
+async function checkJiraTicketQuality(issue: JiraProjectIssue) {
+  jiraQualityCheckBusy.value = issue.key
+  try {
+    let ticketText = `Titel: ${issue.summary}`
+    try {
+      const detail = await getJiraIssueDetail(buildAtlassianConfig(), issue.key)
+      if (detail.description) {
+        ticketText = `Titel: ${detail.summary}\n\nBeschreibung:\n${detail.description}`
+      }
+    } catch {
+      // Fallback auf Summary
+    }
+
+    const systemPrompt =
+      'Du bist ein IREB-zertifizierter Requirements Engineer. Prüfe das folgende Jira-Ticket auf Anforderungsqualität. Bewerte: 1. Klarheit und Eindeutigkeit (Smells, Weichmacher, Passiv-Konstruktionen), 2. Vollständigkeit (fehlende Bedingungen, Akteure, Prozessworte), 3. Testbarkeit (sind Abnahmekriterien ableitbar?), 4. IREB-Qualitätskriterien: Adäquat, Notwendig, Eindeutig, Vollständig, Prüfbar. Erstelle eine Checkliste mit ✅/❌ und konkreten Verbesserungsvorschlägen. Format: Markdown.'
+    const userPrompt = `Jira-Ticket:\n${ticketText}`
+
+    let aiResult: string
+    if (isDemoMode.value) {
+      aiResult = getDemoResponse('smells', ticketText, undefined)
+    } else {
+      aiResult = await callAi(userPrompt, systemPrompt)
+    }
+
+    jiraQualityResults.value = { ...jiraQualityResults.value, [issue.key]: aiResult }
+    show(`Qualitätsprüfung für ${issue.key} abgeschlossen.`, 'success')
+  } catch (error) {
+    const msg = error instanceof AiError ? error.message : 'Qualitätsprüfung fehlgeschlagen.'
+    show(msg, 'error')
+  } finally {
+    jiraQualityCheckBusy.value = null
   }
 }
 </script>
@@ -631,8 +738,8 @@ async function refreshJiraDashboard() {
 
       <template v-else-if="isJiraDashboardTool">
         <p class="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
-          Liest die aktuellen Tickets aus Jira ein und erzeugt ein Management-Dashboard mit KPIs,
-          Statusverteilung, Prioritäten und potenziellen Blockern.
+          Liest aktuelle Jira-Tickets ein und erzeugt ein RE-Health-Dashboard mit Traceability,
+          Review-Kandidaten, Statusverteilung und potenziellen Blockern.
         </p>
 
         <button
@@ -641,8 +748,60 @@ async function refreshJiraDashboard() {
           @click="refreshJiraDashboard"
         >
           <AppIcon :name="jiraDashboardBusy ? 'loader-circle' : 'activity'" :size="18" :class="{ 'animate-spin': jiraDashboardBusy }" />
-          {{ jiraDashboardBusy ? 'Dashboard wird aktualisiert …' : 'Jira-Dashboard aktualisieren' }}
+          {{ jiraDashboardBusy ? 'Dashboard wird aktualisiert …' : 'RE-Health aktualisieren' }}
         </button>
+      </template>
+
+      <template v-else-if="isJiraQualityTool">
+        <p class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          Laden Sie Jira-Tickets aus Ihrem Projekt und lassen Sie die KI jeden Ticket-Text gegen IREB-Qualitätskriterien prüfen.
+        </p>
+
+        <button
+          class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 py-3.5 text-sm font-semibold text-amber-700 transition-all hover:bg-amber-100 disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
+          :disabled="jiraQualityBusy"
+          @click="loadJiraQualityIssues"
+        >
+          <AppIcon :name="jiraQualityBusy ? 'loader-circle' : 'download'" :size="18" :class="{ 'animate-spin': jiraQualityBusy }" />
+          {{ jiraQualityBusy ? 'Tickets werden geladen …' : 'Jira-Tickets laden' }}
+        </button>
+
+        <div v-if="jiraQualityIssues.length" class="space-y-4">
+          <div
+            v-for="issue in jiraQualityIssues"
+            :key="issue.key"
+            class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/60"
+          >
+            <div class="mb-2 flex items-center justify-between gap-3 flex-wrap">
+              <div class="flex items-center gap-2">
+                <a
+                  :href="issue.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-xs font-bold uppercase tracking-wider text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  {{ issue.key }}
+                </a>
+                <span class="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">{{ issue.issueType }}</span>
+                <span class="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">{{ issue.status }}</span>
+              </div>
+              <button
+                class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
+                :disabled="jiraQualityCheckBusy === issue.key"
+                @click="checkJiraTicketQuality(issue)"
+              >
+                <AppIcon :name="jiraQualityCheckBusy === issue.key ? 'loader-circle' : 'search-check'" :size="12" :class="{ 'animate-spin': jiraQualityCheckBusy === issue.key }" />
+                {{ jiraQualityCheckBusy === issue.key ? 'Prüfung läuft …' : 'Qualität prüfen' }}
+              </button>
+            </div>
+            <p class="mb-3 text-sm text-slate-700 dark:text-slate-200">{{ issue.summary }}</p>
+
+            <div v-if="jiraQualityResults[issue.key]" class="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <div class="markdown-body text-sm text-slate-700 dark:text-slate-200" v-html="renderMarkdown(jiraQualityResults[issue.key])" />
+            </div>
+          </div>
+        </div>
       </template>
 
       <template v-else>
@@ -664,11 +823,11 @@ async function refreshJiraDashboard() {
             <button
               class="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-60 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
               :disabled="jiraBusy || !store.requirements.length"
-              :title="settings.hasAtlassianConfig ? 'Alle nicht-syncierten Anforderungen als Jira-Issues anlegen' : 'Atlassian Cloud zuerst konfigurieren'"
+              :title="settings.hasAtlassianConfig ? 'Alle noch nicht übergebenen Anforderungen als Jira-Issues anlegen' : 'Atlassian Cloud zuerst konfigurieren'"
               @click="pushAllRequirementsToJira"
             >
               <AppIcon :name="jiraBusy && !jiraBusyId ? 'loader-circle' : 'arrow-up-right'" :size="16" :class="{ 'animate-spin': jiraBusy && !jiraBusyId }" />
-              Alle nach Jira
+              Jira-Übergabe
             </button>
           </div>
 
@@ -719,7 +878,7 @@ async function refreshJiraDashboard() {
                   @click="pushRequirementToJira(req.id)"
                 >
                   <AppIcon :name="jiraBusyId === req.id ? 'loader-circle' : 'arrow-up-right'" :size="14" :class="{ 'animate-spin': jiraBusyId === req.id }" />
-                  Nach Jira
+                  Nach Jira übergeben
                 </button>
               </div>
             </div>

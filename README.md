@@ -2,13 +2,15 @@
 
 IREB-orientierter Requirements-Engineering-Assistent mit KI-Unterstützung.
 
-Die Anwendung unterstützt jetzt neben AI-Prompts auch eine direkte Jira-/Confluence-Anbindung (Atlassian Cloud), um Anforderungen aus dem Tool nach Jira zu pushen und die Projektdokumentation nach Confluence zu synchronisieren.
+Die Anwendung unterstützt jetzt neben AI-Prompts auch eine direkte Jira-/Confluence-Anbindung (Atlassian Cloud). Jira wird entlang von drei klaren RE-Use-Cases genutzt: Übergabe dokumentierter Anforderungen, Review importierter Tickets und RE-Health/Traceability im Management.
 
 ## Features (Kurzüberblick)
 
 - IREB-Berater-Flow für Ermittlung, Dokumentation, Validierung und Management
 - Tool-Ansichten für Anforderungen, Glossar, Modellierung, Validierung usw.
-- Jira-Export einzelner oder aller Anforderungen aus dem Backlog
+- Jira-Übergabe einzelner oder aller Anforderungen aus dem Backlog
+- Jira-Ticket-Review gegen IREB-Qualitätskriterien
+- Jira RE-Health Dashboard für Traceability-Lücken und Review-Kandidaten
 - Confluence-Sync als Projektseite (inkl. Anforderungen, Glossar, Kontext)
 - Optionale MCP-Kontextanreicherung für AI-Prompts
 
@@ -81,11 +83,17 @@ Hinweis: Die Zugangsdaten werden lokal im Browser (`localStorage`) gespeichert.
 
 ## Nutzung: Jira
 
+Die Jira-Anbindung folgt drei Use Cases:
+
+1. **Jira-Übergabe:** Dokumentierte Anforderungen aus dem Backlog als Jira-Issues erstellen.
+2. **Jira-Review:** Bestehende Jira-Tickets in der Validierung auf IREB-Qualität prüfen.
+3. **RE-Health:** Jira im Management auf Traceability-Lücken, Review-Kandidaten und Status prüfen.
+
 ### Einzelne Anforderung nach Jira
 
 1. In den Bereich `Management` wechseln
-2. Tool `Backlog & Priorisierung` öffnen
-3. Bei einer Anforderung auf `Nach Jira` klicken
+2. Tool `Backlog, Prio & Jira-Übergabe` öffnen
+3. Bei einer Anforderung auf `Nach Jira übergeben` klicken
 
 Ergebnis:
 - Es wird ein Jira-Issue erzeugt (Issue Type: Story)
@@ -93,12 +101,32 @@ Ergebnis:
 
 ### Alle Anforderungen nach Jira
 
-1. Gleicher Bereich (`Backlog & Priorisierung`)
-2. Auf `Alle nach Jira` klicken
+1. Gleicher Bereich (`Backlog, Prio & Jira-Übergabe`)
+2. Auf `Jira-Übergabe` klicken
 
 Ergebnis:
 - Alle noch nicht synchronisierten Anforderungen werden erstellt
 - Bereits verknüpfte Anforderungen werden übersprungen
+
+### Jira-Tickets prüfen
+
+1. In den Bereich `Validierung` wechseln
+2. Tool `Jira-Ticket-Review` öffnen
+3. `Jira-Tickets laden` ausführen
+4. Bei relevanten Tickets `Qualität prüfen` klicken
+
+Ergebnis:
+- Die KI prüft Ticket-Titel und Beschreibung gegen IREB-Kriterien
+- Das Ergebnis zeigt Smells, fehlende Informationen, Testbarkeit und Verbesserungsvorschläge
+
+### RE-Health Dashboard
+
+1. In den Bereich `Management` wechseln
+2. Tool `Jira RE-Health Dashboard` öffnen
+3. `RE-Health aktualisieren` ausführen
+
+Ergebnis:
+- Übersicht zu Traceability, Review-Kandidaten, Status, Prioritäten und potenziellen Blockern
 
 ## Nutzung: Confluence
 
