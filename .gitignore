@@ -26,3 +26,6 @@ npm-debug.log*
 
 # Local planning docs
 JIRA_CONFLUENCE_INTEGRATION_PLAN.md
+
+# Local dev/test scripts (may contain credentials)
+jira-test.ps1
