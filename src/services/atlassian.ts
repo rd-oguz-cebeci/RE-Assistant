@@ -129,13 +129,28 @@ async function apiRequest<T>(
         headers['Content-Type'] = 'application/json'
     }
 
-    const response = await fetch(url, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
+    let response: Response
+    try {
+        response = await fetch(url, {
+            method,
+            headers,
+            body: body !== undefined ? JSON.stringify(body) : undefined,
+        })
+    } catch (error) {
+        throw new AtlassianError(
+            `Atlassian nicht erreichbar: ${(error as Error).message}. ` +
+                'Pruefen Sie Domain/Netzwerk und den Proxy.',
+        )
+    }
 
     if (!response.ok) {
+        if (response.status === 404 && url.startsWith('/api/atlassian/')) {
+            throw new AtlassianError(
+                'Atlassian 404: Der lokale Proxy ist nicht aktiv. ' +
+                    'Setzen Sie VITE_ATLASSIAN_DOMAIN in .env.local (z. B. rewe.atlassian.net) ' +
+                    'und starten Sie den Dev-Server neu.',
+            )
+        }
         const text = await response.text().catch(() => response.statusText)
         let detail = text
         try {

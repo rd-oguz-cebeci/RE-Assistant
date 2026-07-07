@@ -37,7 +37,9 @@ function cspPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '')
-    const atlassianDomain = env.VITE_ATLASSIAN_DOMAIN ?? ''
+    // Fallback-Domain, damit der Dev-Proxy auch ohne .env.local aktiv ist.
+    // Analog zur fest verdrahteten Claude-Code-Lösung. Per VITE_ATLASSIAN_DOMAIN überschreibbar.
+    const atlassianDomain = env.VITE_ATLASSIAN_DOMAIN?.trim() || 'rewe.atlassian.net'
 
     return {
         base,
@@ -54,28 +56,26 @@ export default defineConfig(({ mode }) => {
             },
         },
         server: {
-            proxy: atlassianDomain
-                ? {
-                      '/api/atlassian/jira-agile': {
-                          target: `https://${atlassianDomain}`,
-                          changeOrigin: true,
-                          secure: true,
-                          rewrite: (path) => path.replace('/api/atlassian/jira-agile', '/rest/agile/1.0'),
-                      },
-                      '/api/atlassian/jira': {
-                          target: `https://${atlassianDomain}`,
-                          changeOrigin: true,
-                          secure: true,
-                          rewrite: (path) => path.replace('/api/atlassian/jira', '/rest/api/3'),
-                      },
-                      '/api/atlassian/wiki': {
-                          target: `https://${atlassianDomain}`,
-                          changeOrigin: true,
-                          secure: true,
-                          rewrite: (path) => path.replace('/api/atlassian/wiki', '/wiki/rest/api'),
-                      },
-                  }
-                : {},
+            proxy: {
+                '/api/atlassian/jira-agile': {
+                    target: `https://${atlassianDomain}`,
+                    changeOrigin: true,
+                    secure: true,
+                    rewrite: (path) => path.replace('/api/atlassian/jira-agile', '/rest/agile/1.0'),
+                },
+                '/api/atlassian/jira': {
+                    target: `https://${atlassianDomain}`,
+                    changeOrigin: true,
+                    secure: true,
+                    rewrite: (path) => path.replace('/api/atlassian/jira', '/rest/api/3'),
+                },
+                '/api/atlassian/wiki': {
+                    target: `https://${atlassianDomain}`,
+                    changeOrigin: true,
+                    secure: true,
+                    rewrite: (path) => path.replace('/api/atlassian/wiki', '/wiki/rest/api'),
+                },
+            },
         },
     }
 })

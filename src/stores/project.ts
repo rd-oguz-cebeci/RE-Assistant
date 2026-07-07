@@ -310,6 +310,19 @@ export const useProjectStore = defineStore('project', {
             this.save()
         },
 
+        /** Speichert den aufbereiteten Ticket-Entwurf für die Jira-Übergabe (UC1). */
+        setRequirementJiraDraft(
+            id: string,
+            draft: { summary?: string; description?: string; issueType?: string },
+        ) {
+            const req = this.requirements.find((item) => item.id === id)
+            if (!req) return
+            if (draft.summary !== undefined) req.jiraSummary = draft.summary
+            if (draft.description !== undefined) req.jiraDescription = draft.description
+            if (draft.issueType !== undefined) req.jiraIssueType = draft.issueType
+            this.save()
+        },
+
         setConfluencePageId(pageId: string) {
             this.confluencePageId = pageId
             this.save()
