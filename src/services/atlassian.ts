@@ -354,38 +354,55 @@ export async function getJiraIssueDetail(
  */
 export async function getJiraProjectIssues(
     config: AtlassianConfig,
-    maxResults = 100,
+    maxTotal = 500, // maximale Gesamtanzahl über alle Seiten
 ): Promise<JiraProjectIssue[]> {
     const auth = buildAuth(config.email, config.token)
-    const query = new URLSearchParams({
-        jql: `project = ${config.jiraProjectKey} ORDER BY updated DESC`,
-        maxResults: String(maxResults),
-        fields: 'summary,status,priority,assignee,issuetype,created,updated',
-    })
+    const pageSize = 100
+    const allIssues: JiraProjectIssue[] = []
+    let nextPageToken: string | undefined
+    // Sicherheitslimit: ceil(maxTotal / pageSize) Seiten
+    const maxPages = Math.ceil(Math.max(maxTotal, pageSize) / pageSize)
 
-    const result = await apiRequest<{
-        issues: Array<{
-            id: string
-            key: string
-            fields: {
-                summary?: string
-                status?: { name?: string }
-                priority?: { name?: string }
-                assignee?: { displayName?: string } | null
-                issuetype?: { name?: string }
-                created?: string
-                updated?: string
-            }
-        }>
-    }>(
-        `${JIRA_BASE}/search/jql?${query.toString()}`,
-        'GET',
-        auth,
-    )
+    for (let page = 0; page < maxPages; page++) {
+        const query = new URLSearchParams({
+            jql: `project = ${config.jiraProjectKey} ORDER BY updated DESC`,
+            maxResults: String(pageSize),
+            fields: 'summary,status,priority,assignee,issuetype,created,updated',
+        })
+        if (nextPageToken) query.set('nextPageToken', nextPageToken)
 
-    const mappedFromJql = result.issues.map((issue) => mapJiraIssueFromFields(config.domain, issue))
-    if (mappedFromJql.length > 0) {
-        return mappedFromJql
+        const result = await apiRequest<{
+            issues: Array<{
+                id: string
+                key: string
+                fields: {
+                    summary?: string
+                    status?: { name?: string }
+                    priority?: { name?: string }
+                    assignee?: { displayName?: string } | null
+                    issuetype?: { name?: string }
+                    created?: string
+                    updated?: string
+                }
+            }>
+            nextPageToken?: string
+            isLast?: boolean
+        }>(
+            `${JIRA_BASE}/search/jql?${query.toString()}`,
+            'GET',
+            auth,
+        )
+
+        for (const issue of result.issues ?? []) {
+            allIssues.push(mapJiraIssueFromFields(config.domain, issue))
+        }
+
+        nextPageToken = result.nextPageToken
+        if (!nextPageToken || result.isLast || (result.issues?.length ?? 0) === 0) break
+    }
+
+    if (allIssues.length > 0) {
+        return allIssues
     }
 
     // Fallback: Einige Jira-Setups liefern für das Projekt-JQL keine Ergebnisse,

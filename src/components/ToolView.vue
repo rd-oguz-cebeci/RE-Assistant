@@ -91,6 +91,8 @@ const jiraQualityStatusFilter = ref('all')
 const jiraQualityScoreFilter = ref<'all' | 'unchecked' | ReviewScore>('all')
 const jiraQualitySort = ref<'status' | 'score' | 'updated' | 'key'>('status')
 const jiraQualityBatchProgress = ref<{ done: number; total: number } | null>(null)
+const QUALITY_PAGE_SIZE = 25
+const jiraQualityPage = ref(1)
 
 /** Parst die von der KI vorangestellte Zeile `SCORE: rot|gelb|gruen`. */
 function parseReviewScore(review: string): ReviewScore | null {
@@ -167,15 +169,44 @@ const jiraQualityFiltered = computed(() => {
   })
 })
 
-/** Nach Status gruppierte, gefilterte Tickets (für die Ausbau-Ansicht). */
+/** Gesamtanzahl Seiten basierend auf gefilterter Liste. */
+const jiraQualityTotalPages = computed(() =>
+  Math.max(1, Math.ceil(jiraQualityFiltered.value.length / QUALITY_PAGE_SIZE)),
+)
+
+/** Tickets der aktuellen Seite. */
+const jiraQualityVisible = computed(() => {
+  const start = (jiraQualityPage.value - 1) * QUALITY_PAGE_SIZE
+  return jiraQualityFiltered.value.slice(start, start + QUALITY_PAGE_SIZE)
+})
+
+/** Seitenummern-Liste für die Paginierungsleiste (max. 7 Buttons). */
+const jiraQualityPageNumbers = computed(() => {
+  const total = jiraQualityTotalPages.value
+  const cur = jiraQualityPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | '…')[] = [1]
+  if (cur > 3) pages.push('…')
+  for (let p = Math.max(2, cur - 1); p <= Math.min(total - 1, cur + 1); p++) pages.push(p)
+  if (cur < total - 2) pages.push('…')
+  pages.push(total)
+  return pages
+})
+
+/** Nach Status gruppierte Tickets der aktuellen Seite. */
 const jiraQualityGrouped = computed(() => {
   const groups = new Map<string, JiraProjectIssue[]>()
-  for (const issue of jiraQualityFiltered.value) {
+  for (const issue of jiraQualityVisible.value) {
     const key = issue.status || 'Ohne Status'
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key)!.push(issue)
   }
   return Array.from(groups.entries()).map(([status, issues]) => ({ status, issues }))
+})
+
+// Filter-Änderungen → zurück auf Seite 1
+watch([jiraQualitySearch, jiraQualityStatusFilter, jiraQualityScoreFilter, jiraQualitySort], () => {
+  jiraQualityPage.value = 1
 })
 
 function toggleJiraReview(key: string) {
@@ -781,11 +812,12 @@ async function loadJiraQualityIssues() {
   }
   jiraQualityBusy.value = true
   try {
-    jiraQualityIssues.value = await getJiraProjectIssues(buildAtlassianConfig(), 50)
+    jiraQualityIssues.value = await getJiraProjectIssues(buildAtlassianConfig())
     jiraQualityResults.value = {}
     jiraQualityScores.value = {}
     jiraQualityExpanded.value = {}
     jiraQualityBatchProgress.value = null
+    jiraQualityPage.value = 1
     if (!jiraQualityIssues.value.length) {
       show('Keine Tickets im Projekt gefunden.', 'error')
     } else {
@@ -1124,6 +1156,54 @@ async function checkAllJiraTickets() {
           <p v-if="!jiraQualityFiltered.length" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
             Keine Tickets entsprechen den aktuellen Filtern.
           </p>
+
+          <!-- Mehr anzeigen -->
+          <!-- Paginierung -->
+          <div v-if="jiraQualityTotalPages > 1" class="flex flex-col items-center gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+            <p class="text-xs text-slate-400 dark:text-slate-500">
+              Seite {{ jiraQualityPage }} von {{ jiraQualityTotalPages }}
+              &middot; {{ jiraQualityFiltered.length }} Tickets insgesamt
+            </p>
+            <div class="flex items-center gap-1">
+              <!-- Zurück -->
+              <button
+                class="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-400 dark:hover:bg-slate-800"
+                :disabled="jiraQualityPage === 1"
+                aria-label="Vorherige Seite"
+                @click="jiraQualityPage--"
+              >
+                <AppIcon name="chevron-left" :size="15" />
+              </button>
+
+              <!-- Seitenzahlen -->
+              <template v-for="p in jiraQualityPageNumbers" :key="String(p)">
+                <span
+                  v-if="p === '…'"
+                  class="px-1 text-xs text-slate-400 dark:text-slate-500"
+                >…</span>
+                <button
+                  v-else
+                  class="min-w-[2rem] rounded-lg border px-2 py-1 text-xs font-semibold transition-colors"
+                  :class="p === jiraQualityPage
+                    ? 'border-brand bg-brand text-white dark:border-brand-strong dark:bg-brand-strong'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:bg-slate-800'"
+                  @click="jiraQualityPage = (p as number)"
+                >
+                  {{ p }}
+                </button>
+              </template>
+
+              <!-- Weiter -->
+              <button
+                class="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-400 dark:hover:bg-slate-800"
+                :disabled="jiraQualityPage === jiraQualityTotalPages"
+                aria-label="Nächste Seite"
+                @click="jiraQualityPage++"
+              >
+                <AppIcon name="chevron-right" :size="15" />
+              </button>
+            </div>
+          </div>
         </div>
       </template>
 
