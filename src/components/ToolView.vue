@@ -69,6 +69,11 @@ const dashboardLoaded = ref(false)
 const dashboardUpdatedAt = ref<string>('')
 const STALE_DAYS = 14
 
+// UC3: KI-Analyse (RE-Health-Zusammenfassung)
+const dashboardAiBusy = ref(false)
+const dashboardAiResult = ref('')
+const dashboardAiScore = ref<'gruen' | 'gelb' | 'rot' | null>(null)
+
 /** Tage seit letzter Aktualisierung eines Issues. */
 function daysSince(iso: string): number {
   if (!iso) return 0
@@ -556,6 +561,8 @@ function resetForTool() {
     dashboardSprint.value = null
     dashboardLoaded.value = false
     dashboardUpdatedAt.value = ''
+    dashboardAiResult.value = ''
+    dashboardAiScore.value = null
     return
   }
 
@@ -935,6 +942,9 @@ async function refreshJiraDashboard() {
     dashboardSprint.value = sprint
     dashboardLoaded.value = true
     dashboardUpdatedAt.value = new Date().toLocaleString('de-DE')
+    // Vorherige KI-Analyse verwerfen – Datenbasis hat sich geändert
+    dashboardAiResult.value = ''
+    dashboardAiScore.value = null
 
     if (!issues.length) {
       show('Dashboard aktualisiert (0 Tickets).', 'success')
@@ -946,6 +956,90 @@ async function refreshJiraDashboard() {
     show(msg, 'error')
   } finally {
     jiraDashboardBusy.value = false
+  }
+}
+
+/** Verdichtet die geladenen Dashboard-Daten zu einem kompakten Text für die KI. */
+function buildDashboardDigest(): string {
+  const k = dashboardKpis.value
+  const lines: string[] = [
+    `Projekt: ${settings.atlassianJiraProject}`,
+    `Tickets gesamt: ${k.total} (Erledigt ${k.done}/${k.donePct}%, In Arbeit ${k.inProgress}, To Do ${k.todo})`,
+    `Hohe Priorität: ${k.highPrio} · Ohne Bearbeiter: ${k.unassigned} · Veraltet (>${STALE_DAYS} Tage inaktiv): ${k.stale}`,
+    `Priorität: ${priorityChart.value.map((b) => `${b.label} ${b.value}`).join(', ')}`,
+    `Typen: ${issueTypeChart.value.map((b) => `${b.label} ${b.value}`).join(', ')}`,
+    `Auslastung: ${assigneeChart.value.map((b) => `${b.label} ${b.value} Tickets/${b.points} SP`).join(' · ')}`,
+  ]
+
+  if (staleIssues.value.length) {
+    lines.push(
+      `Älteste offene Tickets: ${staleIssues.value
+        .map((i) => `${i.key} (${i.status}, ${i.age} Tage) ${i.summary}`)
+        .join(' | ')}`,
+    )
+  }
+
+  const sk = sprintKpis.value
+  if (dashboardSprint.value && sk) {
+    const s = dashboardSprint.value.sprint
+    lines.push('')
+    lines.push(`Aktiver Sprint: „${s.name}"${s.goal ? ` – Ziel: ${s.goal}` : ''}`)
+    if (sprintDateRange.value) lines.push(`Zeitraum: ${sprintDateRange.value}${sk.daysLeft !== null ? `, noch ${sk.daysLeft} Tage` : ''}`)
+    lines.push(`Sprint-Fortschritt: ${sk.done}/${sk.total} erledigt (${sk.donePct}%), ${sk.inProgress} in Arbeit, ${sk.todo} offen`)
+    lines.push(`Sprint-Auslastung: ${sprintAssigneeChart.value.map((b) => `${b.label} ${b.value} Tickets/${b.points} SP`).join(' · ')}`)
+  }
+
+  return lines.join('\n')
+}
+
+/** KI-gestützte RE-Health-Analyse der aktuell geladenen Dashboard-Daten. */
+async function analyzeDashboardWithAi() {
+  if (!dashboardIssues.value.length) {
+    show('Bitte zuerst das Dashboard laden.', 'error')
+    return
+  }
+
+  dashboardAiBusy.value = true
+  try {
+    const digest = buildDashboardDigest()
+    const systemPrompt =
+      'Du bist ein IREB-zertifizierter Requirements Engineer und agiler Coach. ' +
+      'Analysiere die folgenden aggregierten Jira-Projekt- und Sprint-Kennzahlen und bewerte die RE-Health. ' +
+      'Beginne deine Antwort ZWINGEND mit einer eigenen ersten Zeile im Format "SCORE: rot|gelb|gruen" ' +
+      '(gruen = gesund, gelb = beobachten, rot = kritischer Handlungsbedarf). ' +
+      'Danach im Markdown-Format: 1. **Gesamteinschätzung** (2–3 Sätze), ' +
+      '2. **Risiken & Auffälligkeiten** (Bulletliste: Blocker, veraltete/High-Prio-Tickets, Über-/Unterlast einzelner Bearbeiter, Sprint-Gefährdung), ' +
+      '3. **Konkrete Handlungsempfehlungen** (priorisierte Bulletliste). ' +
+      'Sei präzise, nenne konkrete Ticket-Keys und Zahlen aus den Daten. Antworte auf Deutsch.'
+    const userPrompt = `Projekt-/Sprint-Kennzahlen:\n${digest}`
+
+    let aiResult: string
+    if (isDemoMode.value) {
+      aiResult =
+        'SCORE: gelb\n\n' +
+        '### 1. Gesamteinschätzung\n' +
+        'Das Projekt ist grundsätzlich auf Kurs, zeigt aber Warnsignale: ein spürbarer Anteil offener Tickets ist seit über zwei Wochen inaktiv, und die Last verteilt sich ungleich.\n\n' +
+        '### 2. Risiken & Auffälligkeiten\n' +
+        '- Mehrere veraltete Tickets ohne Bewegung – Gefahr für den Sprint.\n' +
+        '- Einzelne Bearbeiter mit deutlich höherer Story-Point-Last.\n' +
+        '- Offene High-Prio-Tickets ohne Zuweisung.\n\n' +
+        '### 3. Handlungsempfehlungen\n' +
+        '1. Veraltete Tickets im nächsten Standup reviewen und neu bewerten.\n' +
+        '2. Last des überlasteten Bearbeiters umverteilen.\n' +
+        '3. Unzugewiesene High-Prio-Tickets sofort zuweisen.\n\n' +
+        '*(Demo-Modus – Beispielausgabe.)*'
+    } else {
+      aiResult = await callAi(userPrompt, systemPrompt)
+    }
+
+    dashboardAiResult.value = aiResult
+    dashboardAiScore.value = parseReviewScore(aiResult)
+    show('RE-Health-Analyse erstellt.', 'success')
+  } catch (error) {
+    const msg = error instanceof AiError ? error.message : 'KI-Analyse fehlgeschlagen.'
+    show(msg, 'error')
+  } finally {
+    dashboardAiBusy.value = false
   }
 }
 
@@ -1152,6 +1246,37 @@ async function checkAllJiraTickets() {
           <div class="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
             <span>Projekt <strong class="text-slate-500 dark:text-slate-400">{{ settings.atlassianJiraProject }}</strong></span>
             <span>Stand: {{ dashboardUpdatedAt }}</span>
+          </div>
+
+          <!-- KI-Analyse: RE-Health-Zusammenfassung -->
+          <div class="rounded-2xl border border-brand bg-brand-soft p-5 dark:border-brand-strong/40">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-brand dark:text-brand-strong">
+                <AppIcon name="sparkles" :size="14" /> KI-Analyse · RE-Health
+              </div>
+              <button
+                class="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-60"
+                :disabled="dashboardAiBusy"
+                @click="analyzeDashboardWithAi"
+              >
+                <AppIcon :name="dashboardAiBusy ? 'loader-circle' : 'sparkles'" :size="14" :class="{ 'animate-spin': dashboardAiBusy }" />
+                {{ dashboardAiBusy ? 'Analysiere …' : dashboardAiResult ? 'Neu analysieren' : 'KI-Analyse starten' }}
+              </button>
+            </div>
+
+            <p v-if="!dashboardAiResult && !dashboardAiBusy" class="mt-3 text-xs text-slate-500 dark:text-slate-400">
+              Lässt die KI die aktuellen Projekt- und Sprint-Kennzahlen bewerten: Gesamtampel, Risiken und konkrete Handlungsempfehlungen.
+            </p>
+
+            <div v-if="dashboardAiResult" class="mt-4 space-y-3">
+              <div v-if="dashboardAiScore" class="flex items-center gap-2">
+                <span class="rounded-md px-2.5 py-1 text-xs font-bold" :class="scoreBadgeClass(dashboardAiScore)">
+                  {{ dashboardAiScore === 'rot' ? '🔴 Kritisch' : dashboardAiScore === 'gelb' ? '🟡 Beobachten' : '🟢 Gesund' }}
+                </span>
+              </div>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <div class="markdown-body rounded-xl border border-white/60 bg-white/70 p-4 text-sm text-slate-700 dark:border-slate-700/50 dark:bg-slate-900/40 dark:text-slate-200" v-html="renderMarkdown(stripScoreLine(dashboardAiResult))" />
+            </div>
           </div>
 
           <!-- KPI-Karten -->
