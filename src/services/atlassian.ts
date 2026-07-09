@@ -38,12 +38,29 @@ export interface JiraProjectIssue {
     key: string
     summary: string
     status: string
+    statusCategory: 'new' | 'indeterminate' | 'done' | 'unknown'
     priority: string
     assignee: string
     issueType: string
+    storyPoints: number | null
     created: string
     updated: string
     url: string
+}
+
+export interface JiraSprintInfo {
+    id: number
+    name: string
+    state: 'active' | 'closed' | 'future'
+    goal?: string
+    startDate?: string
+    endDate?: string
+}
+
+export interface ActiveSprintResult {
+    sprint: JiraSprintInfo
+    issues: JiraProjectIssue[]
+    boardName: string
 }
 
 export interface ConfluencePageMeta {
@@ -80,27 +97,59 @@ function mapJiraIssueFromFields(
         key: string
         fields: {
             summary?: string
-            status?: { name?: string }
+            status?: { name?: string; statusCategory?: { key?: string } }
             priority?: { name?: string }
             assignee?: { displayName?: string } | null
             issuetype?: { name?: string }
             created?: string
             updated?: string
+            [key: string]: unknown
         }
     },
+    storyPointsFieldId?: string | null,
 ): JiraProjectIssue {
+    const catKey = issue.fields.status?.statusCategory?.key
+    const statusCategory: JiraProjectIssue['statusCategory'] =
+        catKey === 'new' || catKey === 'indeterminate' || catKey === 'done' ? catKey : 'unknown'
+    const rawPoints = storyPointsFieldId ? issue.fields[storyPointsFieldId] : undefined
+    const storyPoints = typeof rawPoints === 'number' ? rawPoints : null
     return {
         id: issue.id,
         key: issue.key,
         summary: issue.fields.summary ?? '(ohne Summary)',
         status: issue.fields.status?.name ?? 'Unknown',
+        statusCategory,
         priority: issue.fields.priority?.name ?? 'Unknown',
         assignee: issue.fields.assignee?.displayName ?? 'Unassigned',
         issueType: issue.fields.issuetype?.name ?? 'Unknown',
+        storyPoints,
         created: issue.fields.created ?? '',
         updated: issue.fields.updated ?? '',
         url: `https://${domain}/browse/${issue.key}`,
     }
+}
+
+// Story-Points liegen in einem Custom-Field, dessen ID pro Jira-Instanz variiert.
+// Wir ermitteln sie einmalig über die Feld-Metadaten und cachen das Ergebnis.
+let storyPointsFieldIdCache: string | null | undefined
+async function resolveStoryPointsFieldId(auth: string): Promise<string | null> {
+    if (storyPointsFieldIdCache !== undefined) return storyPointsFieldIdCache
+    try {
+        const fields = await apiRequest<Array<{ id: string; name?: string }>>(
+            `${JIRA_BASE}/field`,
+            'GET',
+            auth,
+        )
+        const exact = fields.find((f) => {
+            const n = (f.name ?? '').toLowerCase()
+            return n === 'story points' || n === 'story point estimate' || n === 'story point schätzung'
+        })
+        const fuzzy = fields.find((f) => /story point/i.test(f.name ?? ''))
+        storyPointsFieldIdCache = exact?.id ?? fuzzy?.id ?? null
+    } catch {
+        storyPointsFieldIdCache = null
+    }
+    return storyPointsFieldIdCache
 }
 
 function buildAuth(email: string, token: string): string {
@@ -362,12 +411,14 @@ export async function getJiraProjectIssues(
     let nextPageToken: string | undefined
     // Sicherheitslimit: ceil(maxTotal / pageSize) Seiten
     const maxPages = Math.ceil(Math.max(maxTotal, pageSize) / pageSize)
+    const spField = await resolveStoryPointsFieldId(auth)
+    const fieldList = ['summary', 'status', 'priority', 'assignee', 'issuetype', 'created', 'updated', ...(spField ? [spField] : [])].join(',')
 
     for (let page = 0; page < maxPages; page++) {
         const query = new URLSearchParams({
             jql: `project = ${config.jiraProjectKey} ORDER BY updated DESC`,
             maxResults: String(pageSize),
-            fields: 'summary,status,priority,assignee,issuetype,created,updated',
+            fields: fieldList,
         })
         if (nextPageToken) query.set('nextPageToken', nextPageToken)
 
@@ -383,6 +434,7 @@ export async function getJiraProjectIssues(
                     issuetype?: { name?: string }
                     created?: string
                     updated?: string
+                    [key: string]: unknown
                 }
             }>
             nextPageToken?: string
@@ -394,7 +446,7 @@ export async function getJiraProjectIssues(
         )
 
         for (const issue of result.issues ?? []) {
-            allIssues.push(mapJiraIssueFromFields(config.domain, issue))
+            allIssues.push(mapJiraIssueFromFields(config.domain, issue, spField))
         }
 
         nextPageToken = result.nextPageToken
@@ -434,20 +486,102 @@ export async function getJiraProjectIssues(
                     issuetype?: { name?: string }
                     created?: string
                     updated?: string
+                    [key: string]: unknown
                 }
             }>
         }>(
-            `${JIRA_AGILE_BASE}/board/${board.id}/issue?maxResults=${Math.max(20, Math.min(maxResults, 100))}&fields=summary,status,priority,assignee,issuetype,created,updated`,
+            `${JIRA_AGILE_BASE}/board/${board.id}/issue?maxResults=${pageSize}&fields=${fieldList}`,
             'GET',
             auth,
         )
 
         for (const issue of boardIssues.issues ?? []) {
-            unique.set(issue.key, mapJiraIssueFromFields(config.domain, issue))
+            unique.set(issue.key, mapJiraIssueFromFields(config.domain, issue, spField))
         }
     }
 
     return Array.from(unique.values())
+}
+
+/**
+ * Lädt den aktuell aktiven Sprint eines Projekts inkl. seiner Issues.
+ * Sucht das erste Scrum-Board des Projekts, ermittelt den aktiven Sprint
+ * und lädt dessen Tickets. Gibt `null` zurück, wenn kein aktiver Sprint existiert
+ * (z. B. Kanban-Board oder kein laufender Sprint).
+ */
+export async function getActiveSprintWithIssues(
+    config: AtlassianConfig,
+): Promise<ActiveSprintResult | null> {
+    const auth = buildAuth(config.email, config.token)
+    const spField = await resolveStoryPointsFieldId(auth)
+    const fieldList = ['summary', 'status', 'priority', 'assignee', 'issuetype', 'created', 'updated', ...(spField ? [spField] : [])].join(',')
+
+    // 1) Scrum-Boards des Projekts finden
+    const boards = await apiRequest<{
+        values: Array<{ id: number; name: string; type?: string }>
+    }>(
+        `${JIRA_AGILE_BASE}/board?projectKeyOrId=${encodeURIComponent(config.jiraProjectKey)}&maxResults=20`,
+        'GET',
+        auth,
+    )
+
+    const scrumBoards = (boards.values ?? []).filter((b) => !b.type || b.type === 'scrum')
+    if (!scrumBoards.length) return null
+
+    for (const board of scrumBoards) {
+        // 2) Aktiven Sprint des Boards ermitteln
+        let sprints: { values: Array<{ id: number; name: string; state: string; goal?: string; startDate?: string; endDate?: string }> }
+        try {
+            sprints = await apiRequest(
+                `${JIRA_AGILE_BASE}/board/${board.id}/sprint?state=active&maxResults=1`,
+                'GET',
+                auth,
+            )
+        } catch {
+            // Board ohne Sprint-Unterstützung (Kanban) → nächstes Board
+            continue
+        }
+
+        const active = sprints.values?.[0]
+        if (!active) continue
+
+        // 3) Issues des aktiven Sprints laden
+        const sprintIssues = await apiRequest<{
+            issues: Array<{
+                id: string
+                key: string
+                fields: {
+                    summary?: string
+                    status?: { name?: string; statusCategory?: { key?: string } }
+                    priority?: { name?: string }
+                    assignee?: { displayName?: string } | null
+                    issuetype?: { name?: string }
+                    created?: string
+                    updated?: string
+                    [key: string]: unknown
+                }
+            }>
+        }>(
+            `${JIRA_AGILE_BASE}/sprint/${active.id}/issue?maxResults=100&fields=${fieldList}`,
+            'GET',
+            auth,
+        )
+
+        return {
+            boardName: board.name,
+            sprint: {
+                id: active.id,
+                name: active.name,
+                state: (active.state as JiraSprintInfo['state']) ?? 'active',
+                goal: active.goal || undefined,
+                startDate: active.startDate,
+                endDate: active.endDate,
+            },
+            issues: (sprintIssues.issues ?? []).map((i) => mapJiraIssueFromFields(config.domain, i, spField)),
+        }
+    }
+
+    return null
 }
 
 // ---------------------------------------------------------------------------

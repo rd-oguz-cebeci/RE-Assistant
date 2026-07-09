@@ -11,11 +11,10 @@ import { callAi, AiError } from '@/services/ai'
 import { getDemoResponse } from '@/services/demo'
 import { getRecommendations } from '@/services/recommendations'
 import { downloadProjectExport, serializeProjectExport } from '@/services/export'
-import { syncProjectToConfluence, getJiraProjectIssues, getJiraIssueDetail, AtlassianError } from '@/services/atlassian'
-import type { JiraProjectIssue } from '@/services/atlassian'
+import { syncProjectToConfluence, getJiraProjectIssues, getJiraIssueDetail, getActiveSprintWithIssues, AtlassianError } from '@/services/atlassian'
+import type { JiraProjectIssue, ActiveSprintResult } from '@/services/atlassian'
 import type { Requirement } from '@/types'
 import {
-    loadProjectIssuesForDashboardAdapter,
     createIssueFromRequirementAdapter,
     JiraError,
     mapMoscowToPriority,
@@ -62,6 +61,167 @@ const jiraBusy = ref(false)
 const jiraBusyId = ref<string | null>(null)
 const confluenceBusy = ref(false)
 const jiraDashboardBusy = ref(false)
+
+// UC3: RE-Health Dashboard state
+const dashboardIssues = ref<JiraProjectIssue[]>([])
+const dashboardSprint = ref<ActiveSprintResult | null>(null)
+const dashboardLoaded = ref(false)
+const dashboardUpdatedAt = ref<string>('')
+const STALE_DAYS = 14
+
+/** Tage seit letzter Aktualisierung eines Issues. */
+function daysSince(iso: string): number {
+  if (!iso) return 0
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+}
+
+/** Zählt Vorkommen eines Feldes und liefert sortierte Verteilungsbalken. */
+function distribution(
+  issues: JiraProjectIssue[],
+  key: (i: JiraProjectIssue) => string,
+  limit = 8,
+): { label: string; value: number; pct: number }[] {
+  const counts = new Map<string, number>()
+  for (const i of issues) {
+    const k = key(i) || '—'
+    counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  const total = issues.length || 1
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, value]) => ({ label, value, pct: Math.round((value / total) * 100) }))
+}
+
+/** Auslastung pro Bearbeiter inkl. Story-Points-Summe. */
+function assigneeWorkload(
+  issues: JiraProjectIssue[],
+  limit = 6,
+): { label: string; value: number; points: number; pct: number }[] {
+  const map = new Map<string, { count: number; points: number }>()
+  for (const i of issues) {
+    const k = i.assignee || '—'
+    const cur = map.get(k) ?? { count: 0, points: 0 }
+    cur.count += 1
+    cur.points += i.storyPoints ?? 0
+    map.set(k, cur)
+  }
+  const total = issues.length || 1
+  return Array.from(map.entries())
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, limit)
+    .map(([label, v]) => ({ label, value: v.count, points: v.points, pct: Math.round((v.count / total) * 100) }))
+}
+
+/** Kern-KPIs des Projekts. */
+const dashboardKpis = computed(() => {
+  const issues = dashboardIssues.value
+  const total = issues.length
+  const done = issues.filter((i) => i.statusCategory === 'done').length
+  const inProgress = issues.filter((i) => i.statusCategory === 'indeterminate').length
+  const todo = issues.filter((i) => i.statusCategory === 'new' || i.statusCategory === 'unknown').length
+  const unassigned = issues.filter((i) => i.assignee === 'Unassigned').length
+  const stale = issues.filter((i) => i.statusCategory !== 'done' && daysSince(i.updated) >= STALE_DAYS).length
+  const highPrio = issues.filter((i) => /high|highest|critical|blocker|hoch/i.test(i.priority)).length
+  return {
+    total,
+    done,
+    inProgress,
+    todo,
+    unassigned,
+    stale,
+    highPrio,
+    donePct: total ? Math.round((done / total) * 100) : 0,
+  }
+})
+
+/** Statuskategorie-Verteilung (To Do / In Arbeit / Erledigt) für Donut. */
+const statusCategoryChart = computed(() => {
+  const k = dashboardKpis.value
+  const total = k.total || 1
+  return [
+    { label: 'To Do', value: k.todo, color: '#94a3b8', pct: Math.round((k.todo / total) * 100) },
+    { label: 'In Arbeit', value: k.inProgress, color: '#3b82f6', pct: Math.round((k.inProgress / total) * 100) },
+    { label: 'Erledigt', value: k.done, color: '#10b981', pct: Math.round((k.done / total) * 100) },
+  ]
+})
+
+/** SVG-Donut-Segmente (stroke-dasharray) aus der Statusverteilung. */
+const statusDonutSegments = computed(() => {
+  const circumference = 2 * Math.PI * 42 // r = 42
+  let offset = 0
+  return statusCategoryChart.value
+    .filter((s) => s.value > 0)
+    .map((s) => {
+      const len = (s.value / (dashboardKpis.value.total || 1)) * circumference
+      const seg = { color: s.color, dash: `${len} ${circumference - len}`, offset: -offset }
+      offset += len
+      return seg
+    })
+})
+
+const priorityChart = computed(() => distribution(dashboardIssues.value, (i) => i.priority))
+const issueTypeChart = computed(() => distribution(dashboardIssues.value, (i) => i.issueType))
+const assigneeChart = computed(() => assigneeWorkload(dashboardIssues.value))
+
+/** Älteste offene Tickets (Handlungsbedarf). */
+const staleIssues = computed(() =>
+  dashboardIssues.value
+    .filter((i) => i.statusCategory !== 'done')
+    .map((i) => ({ ...i, age: daysSince(i.updated) }))
+    .sort((a, b) => b.age - a.age)
+    .slice(0, 6),
+)
+
+/** KPIs des aktiven Sprints. */
+const sprintKpis = computed(() => {
+  const s = dashboardSprint.value
+  if (!s) return null
+  const total = s.issues.length
+  const done = s.issues.filter((i) => i.statusCategory === 'done').length
+  const inProgress = s.issues.filter((i) => i.statusCategory === 'indeterminate').length
+  const todo = total - done - inProgress
+  const daysLeft = s.sprint.endDate ? Math.max(0, -daysSince(s.sprint.endDate)) : null
+  return {
+    total,
+    done,
+    inProgress,
+    todo,
+    donePct: total ? Math.round((done / total) * 100) : 0,
+    daysLeft,
+  }
+})
+
+/** Sprint-Zeitraum formatiert. */
+const sprintDateRange = computed(() => {
+  const s = dashboardSprint.value?.sprint
+  if (!s?.startDate || !s?.endDate) return ''
+  const fmt = (d: string) => new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })
+  return `${fmt(s.startDate)} – ${fmt(s.endDate)}`
+})
+
+/** Verteilungen innerhalb des aktiven Sprints. */
+const sprintPriorityChart = computed(() =>
+  dashboardSprint.value ? distribution(dashboardSprint.value.issues, (i) => i.priority) : [],
+)
+const sprintTypeChart = computed(() =>
+  dashboardSprint.value ? distribution(dashboardSprint.value.issues, (i) => i.issueType) : [],
+)
+const sprintAssigneeChart = computed(() =>
+  dashboardSprint.value ? assigneeWorkload(dashboardSprint.value.issues, 6) : [],
+)
+
+/** Ampelfarbe für Statuskategorie-Badge. */
+function categoryBadgeClass(cat: JiraProjectIssue['statusCategory']): string {
+  switch (cat) {
+    case 'done':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+    case 'indeterminate':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+    default:
+      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+  }
+}
 
 // UC1: Jira-Handover (Anforderung → Ticket) state
 interface HandoverDraft {
@@ -392,6 +552,10 @@ function resetForTool() {
     input.value = ''
     result.value = ''
     selectedVariant.value = undefined
+    dashboardIssues.value = []
+    dashboardSprint.value = null
+    dashboardLoaded.value = false
+    dashboardUpdatedAt.value = ''
     return
   }
 
@@ -761,42 +925,22 @@ async function refreshJiraDashboard() {
 
   jiraDashboardBusy.value = true
   try {
-    // Nutze neue jira.ts Adapter-Funktion für UC3
-    const dashboardIssues = await loadProjectIssuesForDashboardAdapter(settings.atlassianJiraProject)
+    // Alle Projekt-Issues (paginiert) + aktiven Sprint parallel laden
+    const [issues, sprint] = await Promise.all([
+      getJiraProjectIssues(buildAtlassianConfig()),
+      getActiveSprintWithIssues(buildAtlassianConfig()).catch(() => null),
+    ])
 
-    if (!dashboardIssues || dashboardIssues.length === 0) {
-      result.value = '## RE-Health Dashboard\n\nKeine Tickets gefunden.\n'
+    dashboardIssues.value = issues
+    dashboardSprint.value = sprint
+    dashboardLoaded.value = true
+    dashboardUpdatedAt.value = new Date().toLocaleString('de-DE')
+
+    if (!issues.length) {
       show('Dashboard aktualisiert (0 Tickets).', 'success')
-      return
+    } else {
+      show(`Dashboard aktualisiert (${issues.length} Tickets${sprint ? `, Sprint „${sprint.sprint.name}"` : ''}).`, 'success')
     }
-
-    // Erstelle Dashboard-Markdown
-    const issueLines = dashboardIssues
-      .slice(0, 10)
-      .map((i) => `| ${i.key} | ${i.title.substring(0, 50)} | ${i.status} | ${i.priority ?? '—'} | ${i.updated ? new Date(i.updated).toLocaleDateString('de-DE') : '?'} |`)
-      .join('\n')
-
-    result.value = [
-      '## RE-Health Dashboard',
-      `Projekt: **${settings.atlassianJiraProject}**`,
-      `Stand: **${new Date().toLocaleString('de-DE')}**`,
-      '',
-      '### Übersicht',
-      '',
-      `| Metrik | Wert |`,
-      `|---|---|`,
-      `| Gesamttickets | ${dashboardIssues.length} |`,
-      '',
-      '### Jira-Tickets (Top 10)',
-      '',
-      '| Key | Title | Status | Priorität | Updated |',
-      '|---|---|---|---|---|',
-      issueLines,
-      '',
-      '*Hinweis: Das vollständige RE-Health Dashboard mit Traceability-Lücken, Review-Kandidaten und Blockern wird in der nächsten Phase implementiert.*',
-    ].join('\n')
-
-    show(`Dashboard aktualisiert (${dashboardIssues.length} Tickets).`, 'success')
   } catch (error) {
     const msg = error instanceof JiraError ? error.message : (error instanceof AtlassianError ? error.message : 'Dashboard konnte nicht geladen werden.')
     show(msg, 'error')
@@ -986,18 +1130,264 @@ async function checkAllJiraTickets() {
 
       <template v-else-if="isJiraDashboardTool">
         <p class="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
-          Liest aktuelle Jira-Tickets ein und erzeugt ein RE-Health-Dashboard mit Traceability,
-          Review-Kandidaten, Statusverteilung und potenziellen Blockern.
+          Liest alle Jira-Tickets des Projekts ein und erzeugt ein RE-Health-Dashboard mit KPIs,
+          Status-/Prioritäts-/Typ-Verteilung, Verteilung nach Bearbeiter, Handlungsbedarf (veraltete Tickets)
+          und – falls vorhanden – dem aktuell laufenden Sprint.
         </p>
 
         <button
-          class="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 py-3.5 text-sm font-semibold text-blue-700 transition-all hover:bg-blue-100 disabled:opacity-60 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+          class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 py-3.5 text-sm font-semibold text-blue-700 transition-all hover:bg-blue-100 disabled:opacity-60 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
           :disabled="jiraDashboardBusy"
           @click="refreshJiraDashboard"
         >
-          <AppIcon :name="jiraDashboardBusy ? 'loader-circle' : 'activity'" :size="18" :class="{ 'animate-spin': jiraDashboardBusy }" />
-          {{ jiraDashboardBusy ? 'Dashboard wird aktualisiert …' : 'RE-Health aktualisieren' }}
+          <AppIcon :name="jiraDashboardBusy ? 'loader-circle' : 'refresh-cw'" :size="18" :class="{ 'animate-spin': jiraDashboardBusy }" />
+          {{ jiraDashboardBusy ? 'Dashboard wird geladen …' : dashboardLoaded ? 'Dashboard aktualisieren' : 'RE-Health laden' }}
         </button>
+
+        <p v-if="dashboardLoaded && !dashboardIssues.length" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+          Keine Tickets im Projekt <strong>{{ settings.atlassianJiraProject }}</strong> gefunden.
+        </p>
+
+        <div v-if="dashboardLoaded && dashboardIssues.length" class="space-y-6">
+          <div class="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
+            <span>Projekt <strong class="text-slate-500 dark:text-slate-400">{{ settings.atlassianJiraProject }}</strong></span>
+            <span>Stand: {{ dashboardUpdatedAt }}</span>
+          </div>
+
+          <!-- KPI-Karten -->
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="rounded-xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900/60">
+              <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400"><AppIcon name="layers" :size="13" /> Gesamt</div>
+              <div class="mt-1 text-2xl font-extrabold text-slate-800 dark:text-slate-100">{{ dashboardKpis.total }}</div>
+            </div>
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+              <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-500"><AppIcon name="circle-check-big" :size="13" /> Erledigt</div>
+              <div class="mt-1 text-2xl font-extrabold text-emerald-700 dark:text-emerald-300">{{ dashboardKpis.donePct }}<span class="text-sm">%</span></div>
+              <div class="text-[11px] text-emerald-600/70 dark:text-emerald-400/70">{{ dashboardKpis.done }} von {{ dashboardKpis.total }}</div>
+            </div>
+            <div class="rounded-xl border border-blue-200 bg-blue-50 p-3.5 dark:border-blue-900/40 dark:bg-blue-950/20">
+              <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-500"><AppIcon name="clock" :size="13" /> In Arbeit</div>
+              <div class="mt-1 text-2xl font-extrabold text-blue-700 dark:text-blue-300">{{ dashboardKpis.inProgress }}</div>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900/60">
+              <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400"><AppIcon name="list-todo" :size="13" /> To Do</div>
+              <div class="mt-1 text-2xl font-extrabold text-slate-800 dark:text-slate-100">{{ dashboardKpis.todo }}</div>
+            </div>
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-3.5 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-500"><AppIcon name="alarm-clock" :size="13" /> Veraltet</div>
+              <div class="mt-1 text-2xl font-extrabold text-amber-700 dark:text-amber-300">{{ dashboardKpis.stale }}</div>
+              <div class="text-[11px] text-amber-600/70 dark:text-amber-400/70">&gt; {{ STALE_DAYS }} Tage inaktiv</div>
+            </div>
+            <div class="rounded-xl border border-red-200 bg-red-50 p-3.5 dark:border-red-900/40 dark:bg-red-950/20">
+              <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-red-500"><AppIcon name="flame" :size="13" /> Hohe Prio</div>
+              <div class="mt-1 text-2xl font-extrabold text-red-700 dark:text-red-300">{{ dashboardKpis.highPrio }}</div>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900/60">
+              <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400"><AppIcon name="user-round-x" :size="13" /> Ohne Zuw.</div>
+              <div class="mt-1 text-2xl font-extrabold text-slate-800 dark:text-slate-100">{{ dashboardKpis.unassigned }}</div>
+            </div>
+          </div>
+
+          <!-- Status-Donut + Legende -->
+          <div class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <h4 class="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">Statusverteilung</h4>
+            <div class="flex flex-col items-center gap-5 sm:flex-row sm:gap-8">
+              <div class="relative h-36 w-36 shrink-0">
+                <svg viewBox="0 0 100 100" class="h-full w-full -rotate-90">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" class="text-slate-100 dark:text-slate-800" stroke-width="14" />
+                  <circle
+                    v-for="(seg, idx) in statusDonutSegments"
+                    :key="idx"
+                    cx="50" cy="50" r="42" fill="none"
+                    :stroke="seg.color"
+                    stroke-width="14"
+                    :stroke-dasharray="seg.dash"
+                    :stroke-dashoffset="seg.offset"
+                  />
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <span class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{{ dashboardKpis.donePct }}%</span>
+                  <span class="text-[10px] uppercase tracking-wider text-slate-400">erledigt</span>
+                </div>
+              </div>
+              <div class="flex-1 space-y-2 self-stretch">
+                <div v-for="s in statusCategoryChart" :key="s.label" class="flex items-center gap-3">
+                  <span class="h-3 w-3 shrink-0 rounded-full" :style="{ backgroundColor: s.color }" />
+                  <span class="w-20 shrink-0 text-xs text-slate-600 dark:text-slate-300">{{ s.label }}</span>
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div class="h-full rounded-full" :style="{ width: `${s.pct}%`, backgroundColor: s.color }" />
+                  </div>
+                  <span class="w-14 shrink-0 text-right text-xs font-semibold text-slate-500 dark:text-slate-400">{{ s.value }} · {{ s.pct }}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Balkendiagramme: Priorität / Typ -->
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900/60">
+              <h4 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Nach Priorität</h4>
+              <div class="space-y-2">
+                <div v-for="b in priorityChart" :key="b.label" class="flex items-center gap-2">
+                  <span class="w-20 shrink-0 truncate text-xs text-slate-600 dark:text-slate-300" :title="b.label">{{ b.label }}</span>
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div class="h-full rounded-full bg-red-400" :style="{ width: `${b.pct}%` }" />
+                  </div>
+                  <span class="w-8 shrink-0 text-right text-xs font-semibold text-slate-500">{{ b.value }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900/60">
+              <h4 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Nach Typ</h4>
+              <div class="space-y-2">
+                <div v-for="b in issueTypeChart" :key="b.label" class="flex items-center gap-2">
+                  <span class="w-20 shrink-0 truncate text-xs text-slate-600 dark:text-slate-300" :title="b.label">{{ b.label }}</span>
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div class="h-full rounded-full bg-brand" :style="{ width: `${b.pct}%` }" />
+                  </div>
+                  <span class="w-8 shrink-0 text-right text-xs font-semibold text-slate-500">{{ b.value }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Verteilung nach Bearbeiter -->
+          <div class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900/60">
+            <h4 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Auslastung nach Bearbeiter</h4>
+            <div class="space-y-2">
+              <div v-for="b in assigneeChart" :key="b.label" class="flex items-center gap-2">
+                <span class="w-32 shrink-0 truncate text-xs text-slate-600 dark:text-slate-300" :title="b.label">{{ b.label }}</span>
+                <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div class="h-full rounded-full bg-indigo-400" :style="{ width: `${b.pct}%` }" />
+                </div>
+                <span class="w-8 shrink-0 text-right text-xs font-semibold text-slate-500">{{ b.value }}</span>
+                <span class="w-14 shrink-0 text-right text-[11px] font-medium text-indigo-500 dark:text-indigo-400">{{ b.points }} SP</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Handlungsbedarf: veraltete Tickets -->
+          <div v-if="staleIssues.length" class="rounded-xl border border-amber-200 bg-amber-50/50 p-5 dark:border-amber-900/40 dark:bg-amber-950/10">
+            <h4 class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              <AppIcon name="alarm-clock" :size="14" /> Handlungsbedarf – älteste offene Tickets
+            </h4>
+            <div class="space-y-1.5">
+              <a
+                v-for="i in staleIssues"
+                :key="i.key"
+                :href="i.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-3 rounded-lg bg-white/70 px-3 py-2 transition-colors hover:bg-white dark:bg-slate-900/40 dark:hover:bg-slate-900/70"
+              >
+                <span class="shrink-0 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">{{ i.key }}</span>
+                <span class="flex-1 truncate text-xs text-slate-700 dark:text-slate-200">{{ i.summary }}</span>
+                <span class="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium" :class="categoryBadgeClass(i.statusCategory)">{{ i.status }}</span>
+                <span class="shrink-0 text-[11px] font-semibold text-amber-600 dark:text-amber-400">{{ i.age }} T</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Aktueller Sprint -->
+          <div v-if="dashboardSprint && sprintKpis" class="rounded-2xl border border-brand bg-brand-soft p-5 dark:border-brand-strong/40">
+            <div class="mb-4 flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-brand dark:text-brand-strong">
+                  <AppIcon name="target" :size="14" /> Aktueller Sprint · {{ dashboardSprint.boardName }}
+                </div>
+                <h4 class="mt-1 text-base font-extrabold text-slate-800 dark:text-slate-100">{{ dashboardSprint.sprint.name }}</h4>
+                <p v-if="dashboardSprint.sprint.goal" class="mt-0.5 text-xs italic text-slate-500 dark:text-slate-400">„{{ dashboardSprint.sprint.goal }}"</p>
+              </div>
+              <div class="text-right text-xs text-slate-500 dark:text-slate-400">
+                <div v-if="sprintDateRange" class="flex items-center justify-end gap-1"><AppIcon name="calendar" :size="12" /> {{ sprintDateRange }}</div>
+                <div v-if="sprintKpis.daysLeft !== null" class="mt-0.5 font-semibold text-brand dark:text-brand-strong">
+                  {{ sprintKpis.daysLeft === 0 ? 'Endet heute' : `noch ${sprintKpis.daysLeft} Tage` }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Sprint-Fortschritt -->
+            <div class="mb-3">
+              <div class="mb-1 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                <span>Fortschritt</span>
+                <span class="font-semibold">{{ sprintKpis.done }} / {{ sprintKpis.total }} erledigt ({{ sprintKpis.donePct }}%)</span>
+              </div>
+              <div class="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                <div class="h-full bg-emerald-500" :style="{ width: `${(sprintKpis.done / Math.max(sprintKpis.total, 1)) * 100}%` }" />
+                <div class="h-full bg-blue-500" :style="{ width: `${(sprintKpis.inProgress / Math.max(sprintKpis.total, 1)) * 100}%` }" />
+              </div>
+              <div class="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500" /> {{ sprintKpis.done }} erledigt</span>
+                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-blue-500" /> {{ sprintKpis.inProgress }} in Arbeit</span>
+                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-slate-400" /> {{ sprintKpis.todo }} offen</span>
+              </div>
+            </div>
+
+            <!-- Sprint-Verteilungen: Priorität / Typ -->
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+              <div class="rounded-xl border border-white/60 bg-white/70 p-4 dark:border-slate-700/50 dark:bg-slate-900/40">
+                <h5 class="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Nach Priorität</h5>
+                <div class="space-y-2">
+                  <div v-for="b in sprintPriorityChart" :key="b.label" class="flex items-center gap-2">
+                    <span class="w-20 shrink-0 truncate text-xs text-slate-600 dark:text-slate-300" :title="b.label">{{ b.label }}</span>
+                    <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div class="h-full rounded-full bg-red-400" :style="{ width: `${b.pct}%` }" />
+                    </div>
+                    <span class="w-8 shrink-0 text-right text-xs font-semibold text-slate-500">{{ b.value }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="rounded-xl border border-white/60 bg-white/70 p-4 dark:border-slate-700/50 dark:bg-slate-900/40">
+                <h5 class="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Nach Typ</h5>
+                <div class="space-y-2">
+                  <div v-for="b in sprintTypeChart" :key="b.label" class="flex items-center gap-2">
+                    <span class="w-20 shrink-0 truncate text-xs text-slate-600 dark:text-slate-300" :title="b.label">{{ b.label }}</span>
+                    <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div class="h-full rounded-full bg-brand" :style="{ width: `${b.pct}%` }" />
+                    </div>
+                    <span class="w-8 shrink-0 text-right text-xs font-semibold text-slate-500">{{ b.value }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sprint-Auslastung nach Bearbeiter -->
+            <div class="mt-4 rounded-xl border border-white/60 bg-white/70 p-4 dark:border-slate-700/50 dark:bg-slate-900/40">
+              <h5 class="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Auslastung nach Bearbeiter</h5>
+              <div class="space-y-2">
+                <div v-for="b in sprintAssigneeChart" :key="b.label" class="flex items-center gap-2">
+                  <span class="w-32 shrink-0 truncate text-xs text-slate-600 dark:text-slate-300" :title="b.label">{{ b.label }}</span>
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div class="h-full rounded-full bg-indigo-400" :style="{ width: `${b.pct}%` }" />
+                  </div>
+                  <span class="w-8 shrink-0 text-right text-xs font-semibold text-slate-500">{{ b.value }}</span>
+                  <span class="w-14 shrink-0 text-right text-[11px] font-medium text-indigo-500 dark:text-indigo-400">{{ b.points }} SP</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sprint-Tickets -->
+            <div class="mt-4 max-h-72 space-y-1.5 overflow-y-auto pr-1">
+              <a
+                v-for="i in dashboardSprint.issues"
+                :key="i.key"
+                :href="i.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-3 rounded-lg bg-white/70 px-3 py-2 transition-colors hover:bg-white dark:bg-slate-900/40 dark:hover:bg-slate-900/70"
+              >
+                <span class="shrink-0 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">{{ i.key }}</span>
+                <span class="flex-1 truncate text-xs text-slate-700 dark:text-slate-200">{{ i.summary }}</span>
+                <span class="hidden shrink-0 text-[11px] text-slate-400 sm:inline">{{ i.assignee }}</span>
+                <span class="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium" :class="categoryBadgeClass(i.statusCategory)">{{ i.status }}</span>
+              </a>
+            </div>
+          </div>
+
+          <div v-else class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+            Kein aktiver Sprint gefunden (Kanban-Board oder kein laufender Sprint).
+          </div>
+        </div>
       </template>
 
       <template v-else-if="isJiraQualityTool">
