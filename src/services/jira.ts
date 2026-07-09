@@ -167,7 +167,7 @@ async function jiraGet<T>(path: string, creds: JiraCredentials): Promise<T> {
             .catch(() => response.statusText)
         if (response.status === 401 || response.status === 403) {
             throw new JiraError(
-                `Jira-Authentifizierung fehlgeschlagen (${response.status}). Token/E-Mail prüfen.`,
+                `Jira-Authentifizierung fehlgeschlagen (${response.status}). Token/E-Mail prüfen. ${text || ''}`.trim(),
             )
         }
         throw new JiraError(`Jira ${response.status}: ${text || response.statusText}`)
@@ -208,7 +208,7 @@ async function jiraPost<T>(path: string, payload: unknown, creds: JiraCredential
             .catch(() => response.statusText)
         if (response.status === 401 || response.status === 403) {
             throw new JiraError(
-                `Jira-Authentifizierung fehlgeschlagen (${response.status}). Token/E-Mail prüfen.`,
+                `Jira-Authentifizierung fehlgeschlagen (${response.status}). Token/E-Mail prüfen. ${text || ''}`.trim(),
             )
         }
         throw new JiraError(`Jira ${response.status}: ${text || response.statusText}`)
@@ -359,6 +359,25 @@ export async function loadProjectIssuesForDashboard(
  *
  * Rückgabe: { key: 'REQ-42', id: '...', ... }
  */
+/**
+ * Wandelt Plaintext in ein minimales Atlassian Document Format (ADF) um.
+ * Jira Cloud REST API v3 verlangt für das `description`-Feld ein ADF-Dokument.
+ * Jede nicht-leere Zeile wird zu einem eigenen Paragraph; Leerzeilen werden
+ * zu leeren Paragraphen (Absatzabstand).
+ */
+function textToAdf(text: string): Record<string, unknown> {
+    const lines = (text || '').split(/\r?\n/)
+    const content = lines.map((line) =>
+        line.length > 0
+            ? { type: 'paragraph', content: [{ type: 'text', text: line }] }
+            : { type: 'paragraph' },
+    )
+    if (content.length === 0) {
+        content.push({ type: 'paragraph' })
+    }
+    return { type: 'doc', version: 1, content }
+}
+
 export async function createIssueFromRequirement(
     projectKey: string,
     summary: string,
@@ -372,7 +391,7 @@ export async function createIssueFromRequirement(
         fields: {
             project: { key: projectKey },
             summary: summary.substring(0, 255), // Jira-Limit
-            description: description.substring(0, 32767), // Jira-Limit für Description
+            description: textToAdf(description.substring(0, 32767)), // Jira-Cloud v3 erwartet ADF
             issuetype: { name: issueType },
             labels: ['ireb-re-assistant', ...labels],
             priority: { name: priority },
