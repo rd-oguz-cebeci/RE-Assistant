@@ -68,7 +68,7 @@ export interface JiraIssueCreatePayload {
     fields: {
         project: { key: string }
         summary: string
-        description?: string
+        description?: string | Record<string, unknown>
         issuetype: { name: string }
         labels?: string[]
         priority?: { name: string }
