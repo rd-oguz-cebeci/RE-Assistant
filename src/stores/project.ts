@@ -30,6 +30,8 @@ interface ProjectState {
     tempTranscript: string
     tempNote: string
     tempValReqText: string
+    /** ID der Confluence-Seite nach erstem Sync (für Upsert bei Folgeaufrufen). */
+    confluencePageId: string
 }
 
 interface DemoStoryFields {
@@ -128,6 +130,7 @@ function defaultState(): ProjectState {
         advisorAnswers: {},
         advisorCurrentPhase: 'elicitation',
         advisorCompleted: false,
+        confluencePageId: '',
         tempVision: emptyDrafts.tempVision,
         tempPersonaText: emptyDrafts.tempPersonaText,
         tempTranscript: emptyDrafts.tempTranscript,
@@ -168,6 +171,7 @@ export const useProjectStore = defineStore('project', {
                 this.advisorCurrentPhase = p.advisorCurrentPhase ?? 'elicitation'
                 this.advisorCompleted = p.advisorCompleted ?? false
                 this.demoModeLoaded = p.demoModeLoaded ?? false
+                this.confluencePageId = p.confluencePageId ?? ''
 
                 if (isLegacyAutoDemoState(p)) {
                     const emptyDrafts = emptyDraftFields()
@@ -296,6 +300,31 @@ export const useProjectStore = defineStore('project', {
             if (!req) return
             req.complexity = complexity
             req.priority = priority
+            this.save()
+        },
+
+        setRequirementJiraKey(id: string, jiraKey: string) {
+            const req = this.requirements.find((item) => item.id === id)
+            if (!req) return
+            req.jiraKey = jiraKey
+            this.save()
+        },
+
+        /** Speichert den aufbereiteten Ticket-Entwurf für die Jira-Übergabe (UC1). */
+        setRequirementJiraDraft(
+            id: string,
+            draft: { summary?: string; description?: string; issueType?: string },
+        ) {
+            const req = this.requirements.find((item) => item.id === id)
+            if (!req) return
+            if (draft.summary !== undefined) req.jiraSummary = draft.summary
+            if (draft.description !== undefined) req.jiraDescription = draft.description
+            if (draft.issueType !== undefined) req.jiraIssueType = draft.issueType
+            this.save()
+        },
+
+        setConfluencePageId(pageId: string) {
+            this.confluencePageId = pageId
             this.save()
         },
 

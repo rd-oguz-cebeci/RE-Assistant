@@ -41,6 +41,14 @@ export interface Requirement {
     type?: string
     complexity?: string
     priority?: string
+    /** Jira-Issue-Key nach dem Sync, z. B. "REQ-42". */
+    jiraKey?: string
+    /** Aufbereiteter Ticket-Titel (Summary) für die Jira-Übergabe. */
+    jiraSummary?: string
+    /** Aufbereitete Ticket-Beschreibung (User Story + Akzeptanzkriterien). */
+    jiraDescription?: string
+    /** Ziel-Issue-Type in Jira (Story, Task, Bug, Epic). */
+    jiraIssueType?: string
 }
 
 /** Glossar-Eintrag (Single Source of Truth für Fachbegriffe). */

@@ -204,7 +204,6 @@ async function runDemoEndToEnd() {
   demoMode.value = true
   while (!hasFinishedFlow.value && currentStep.value) {
     input.value = currentStep.value.demoAnswer
-    // eslint-disable-next-line no-await-in-loop
     await submit()
   }
 }

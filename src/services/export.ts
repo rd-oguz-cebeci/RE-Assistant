@@ -9,11 +9,11 @@ function formatRequirementsTable(requirements: Requirement[]): string {
     if (requirements.length === 0) return ''
 
     let md = '## Anforderungen (Backlog)\n'
-    md += '| ID | Anforderung | Typ | Priorität | Komplexität |\n'
-    md += '|---|---|---|---|---|\n'
+    md += '| ID | Jira | Anforderung | Typ | Priorität | Komplexität |\n'
+    md += '|---|---|---|---|---|---|\n'
 
     for (const requirement of requirements) {
-        md += `| ${escapeTableCell(requirement.id)} | ${escapeTableCell(requirement.text)} | ${escapeTableCell(requirement.type ?? '-')} | ${escapeTableCell(requirement.priority ?? '-')} | ${escapeTableCell(requirement.complexity ?? '-')} |\n`
+        md += `| ${escapeTableCell(requirement.id)} | ${escapeTableCell(requirement.jiraKey ?? '-')} | ${escapeTableCell(requirement.text)} | ${escapeTableCell(requirement.type ?? '-')} | ${escapeTableCell(requirement.priority ?? '-')} | ${escapeTableCell(requirement.complexity ?? '-')} |\n`
     }
 
     md += '\n'

@@ -264,6 +264,15 @@ export const menuStructure: MenuSection[] = [
                     "System-Prompt:\nRolle: Senior QA. Wende strenges 'Chain-of-Thought' an: 1. Isoliere Sätze, 2. Prüfe auf IREB-Smells (Weichmacher, Universalquantoren, Nominalisierung, unklare Bedingungen), 3. Prüfe Passiv, 4. Smells zusammenfassen, 5. Verbesserung vorschlagen.\n\nUser-Prompt:\nAnforderung: [Gewählte Anforderung]",
             },
             {
+                id: 'jira_quality',
+                category: 'Jira Review',
+                icon: 'search-check',
+                label: 'Jira-Ticket-Review',
+                desc: 'Jira-Tickets importieren und mit KI auf IREB-Qualität prüfen.',
+                instruction: 'Laden Sie Jira-Tickets und prüfen Sie deren RE-Qualität automatisch.',
+                why: 'Validierung und Verifikation prüfen, ob Anforderungen verständlich, vollständig und testbar sind. Jira-Tickets aus externen Quellen brauchen genau diesen Review, bevor sie als belastbare Anforderungen in Umsetzung oder Baseline gehen.',
+            },
+            {
                 id: 'tests',
                 category: 'Prüfung',
                 icon: 'beaker',
@@ -361,6 +370,15 @@ export const menuStructure: MenuSection[] = [
         why: 'Requirements Management sichert die Traceability (Verfolgbarkeit), steuert Versionen und koordiniert Änderungen (Change Requests) systematisch über den gesamten Projektlebenszyklus.',
         children: [
             {
+                id: 'jira_dashboard',
+                category: 'Health',
+                icon: 'activity',
+                label: 'Jira RE-Health Dashboard',
+                desc: 'Prüft Jira-Tickets auf Traceability, Review-Bedarf und Anforderungsstatus.',
+                instruction: 'Laden Sie die aktuellen Jira-Issues und erstellen Sie ein RE-Health-Dashboard.',
+                why: 'Requirements Management sichert Nachvollziehbarkeit, Abdeckung und Änderbarkeit. Ein RE-Health-Dashboard zeigt deshalb nicht nur Delivery-Status, sondern vor allem fehlende Verknüpfungen, Review-Kandidaten und Traceability-Lücken.',
+            },
+            {
                 id: 'export_context',
                 category: 'Export',
                 icon: 'download',
@@ -370,13 +388,22 @@ export const menuStructure: MenuSection[] = [
                 why: 'Ein strukturierter Export macht den erarbeiteten RE-Kontext außerhalb des Assistenten wiederverwendbar. So lassen sich Vision, Systemkontext, Glossar und Backlog in externe KI-Workflows übernehmen, ohne Informationen manuell neu zusammenzustellen.',
             },
             {
+                id: 'jira_handover',
+                category: 'Übergabe',
+                icon: 'arrow-up-right',
+                label: 'Anforderung → Jira-Ticket',
+                desc: 'Freigegebene Anforderungen KI-gestützt zu umsetzungsreifen Jira-Tickets aufbereiten und übergeben.',
+                instruction: 'Bereiten Sie je Anforderung ein Ticket auf, prüfen Sie die Vorschau und legen Sie es in Jira an.',
+                why: 'Die Übergabe an die Umsetzung ist der Zielpunkt des roten IREB-Pfads: Aus validierten Anforderungen entstehen nachvollziehbare, umsetzungsreife Jira-Tickets. Eine KI-gestützte Aufbereitung (prägnanter Titel, User Story, Akzeptanzkriterien) plus editierbare Vorschau stellt sicher, dass die im RE-Prozess erarbeitete Qualität nicht verloren geht.',
+            },
+            {
                 id: 'backlog',
                 category: 'Backlog',
                 icon: 'list-todo',
-                label: 'Backlog & Prio',
-                desc: 'Anforderungen verwalten und durch KI schätzen lassen.',
-                instruction: 'Klicken Sie bei Anforderungen auf "KI-Schätzung".',
-                why: 'Ohne harte Priorisierung (z.B. MoSCoW, Kano) weiß die Entwicklung nicht, welche Features essenziell sind, wenn am Ende des Projekts Zeit oder Budget knapp werden.',
+                label: 'Backlog & Priorisierung',
+                desc: 'Anforderungen verwalten, schätzen und priorisieren.',
+                instruction: 'Schätzen Sie Komplexität und MoSCoW-Priorität Ihrer Anforderungen.',
+                why: 'Nach der Dokumentation werden Anforderungen im Management priorisiert und versioniert. Eine belastbare Schätzung und MoSCoW-Priorisierung ist die Voraussetzung für eine sinnvolle Übergabe in die Umsetzung.',
                 promptPattern:
                     'System-Prompt:\nSchätze die Anforderung ein. Output exakt im Format: [Komplexität] | [MoSCoW]\n\nUser-Prompt:\nAnforderung: [Gewählte Anforderung]',
             },

@@ -23,3 +23,9 @@ npm-debug.log*
 # Vite / TS cache
 *.tsbuildinfo
 .vite/
+
+# Local planning docs
+JIRA_CONFLUENCE_INTEGRATION_PLAN.md
+
+# Local dev/test scripts (may contain credentials)
+jira-test.ps1
