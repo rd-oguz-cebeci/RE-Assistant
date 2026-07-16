@@ -1,4 +1,5 @@
 import { useSettingsStore } from '@/stores/settings'
+import { useProjectStore } from '@/stores/project'
 import { fetchMcpContext, serializeMcpContext, MCP_BEARER_TOKEN } from '@/services/mcp'
 
 /** Vom KI-Service ausgelöster Fehler (für gezielte Toast-Meldungen). */
@@ -18,12 +19,13 @@ let cachedMcpContext: string | null | undefined
 
 async function maybeAttachMcpContext(systemInstruction: string, bearerToken?: string, mcpUrl?: string): Promise<string> {
     const activeToken = bearerToken?.trim() || undefined
-    const shouldFetchMcp = MCP_BEARER_TOKEN || activeToken
+    const activeMcpUrl = mcpUrl?.trim() || undefined
+    const shouldFetchMcp = MCP_BEARER_TOKEN || activeToken || activeMcpUrl
     if (!shouldFetchMcp) return systemInstruction
 
     if (cachedMcpContext === undefined) {
         try {
-            const contextData = await fetchMcpContext(undefined, activeToken, mcpUrl)
+            const contextData = await fetchMcpContext(undefined, activeToken, activeMcpUrl)
             const serialized = serializeMcpContext(contextData).trim()
             cachedMcpContext = serialized || null
         } catch {
@@ -35,6 +37,22 @@ async function maybeAttachMcpContext(systemInstruction: string, bearerToken?: st
     return `MCP-Kontext:\n${cachedMcpContext}\n\n${systemInstruction}`
 }
 
+function maybeAttachConfluenceContext(systemInstruction: string): string {
+    const project = useProjectStore()
+    const context = project.activeConfluenceContext
+    if (!context?.text?.trim()) return systemInstruction
+
+    return [
+        'Zusätzlicher Kontext aus Confluence:',
+        `Titel: ${context.title}`,
+        `Quelle: ${context.sourceUrl}`,
+        '',
+        context.text.trim(),
+        '',
+        systemInstruction,
+    ].join('\n')
+}
+
 /**
  * Ruft den konfigurierten KI-Anbieter auf und liefert den Antworttext.
  * Wirft {@link AiError} mit aussagekräftiger Meldung bei Fehlern.
@@ -44,7 +62,8 @@ async function maybeAttachMcpContext(systemInstruction: string, bearerToken?: st
  */
 export async function callAi(prompt: string, systemInstruction = ''): Promise<string> {
     const settings = useSettingsStore()
-    const mergedInstruction = await maybeAttachMcpContext(systemInstruction, settings.mcpBearerToken, settings.mcpUrl)
+    const withConfluenceContext = maybeAttachConfluenceContext(systemInstruction)
+    const mergedInstruction = await maybeAttachMcpContext(withConfluenceContext, settings.mcpBearerToken, settings.mcpUrl)
     const apiKey = settings.apiKey.trim()
 
     if (!apiKey) {

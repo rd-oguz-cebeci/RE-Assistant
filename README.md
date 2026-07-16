@@ -1,97 +1,44 @@
-# RE AI Assistant (RE-Assistant)
-
-Ein leichtgewichtiges, lokal laufendes Frontend für KI-gestützte Requirements-Engineering-Werkzeuge (IREB CPRE).
-
-Kurzüberblick
-- **Zweck:** Sammlung von interaktiven RE-Werkzeugen (Zielbaum, Stakeholder-Analyse, Persona, Glossar, NFR-Ableitung u. v. m.), die KI-Prompts nutzen, um Anforderungen zu ermitteln, zu dokumentieren und zu modellieren.
-- **Tech-Stack:** Vue 3, TypeScript, Vite, Pinia, TailwindCSS.
-
-Wichtige Funktionen und Bestandteile
-- `src/main.ts` — Startpunkt der App; initialisiert Pinia, Theme und lädt persistierten Projektzustand. [src/main.ts](src/main.ts#L1)
-- `src/App.vue` — Root-Komponente; Sidebar, Header, Hauptansichten und globale Modals. [src/App.vue](src/App.vue#L1)
-- Stores:
-  - `src/stores/project.ts` — Projektzustand: Anforderungen, Glossar, Favoriten, Custom-Prompts, Persistenz (localStorage). [src/stores/project.ts](src/stores/project.ts#L1)
-  - `src/stores/settings.ts` — Speicherung von API-Keys, Provider-Auswahl und Theme-Handling. [src/stores/settings.ts](src/stores/settings.ts#L1)
-- Services:
-  - `src/services/ai.ts` — Kern-Wrapper für KI-Aufrufe (Gemini / Anthropic), Fehlerbehandlung und Retry-Logik. [src/services/ai.ts](src/services/ai.ts#L1)
-  - `src/services/mcp.ts` — Fetch/Serialisierung von MCP-Kontextdaten; Proxy-URL / Bearer-Token-Unterstützung. [src/services/mcp.ts](src/services/mcp.ts#L1)
-  - `src/services/prompts.ts` — Prompt-Muster parsen und effektive System/User-Prompts erzeugen. [src/services/prompts.ts](src/services/prompts.ts#L1)
-- Komponenten:
-  - UI: `TheHeader`, `TheSidebar`, `ApiModal`, `ToastContainer`, `MermaidView` uvm. (siehe `src/components`).
-  - `src/composables/useToast.ts` — Einfacher, reaktiver Toast-Mechanismus. [src/composables/useToast.ts](src/composables/useToast.ts#L1)
-- Konfiguration: `src/config/menu.ts` enthält die vollständige Werkzeug-/Prompt-Struktur (IREB-Phasen & Werkzeuge). [src/config/menu.ts](src/config/menu.ts#L1)
-
-Installation & Entwickeln
-1. Abhängigkeiten installieren:
-
-```bash
-npm install
-```
-
-2. Entwicklung starten:
-
-```bash
-npm run dev
-```
-
-Build & Vorschau
-
-```bash
-npm run build
-npm run preview
-```
-
-Wichtige npm-Skripte (aus `package.json`)
-- `dev` — startet Vite-Devserver
-- `build` — Type-Checking (`vue-tsc`) und Vite-Build
-- `preview` — lokale Vorschau des Builds
-- `lint` / `format` / `test`
-
-API- & MCP-Konfiguration
-- Die App speichert API-Keys und MCP-Einstellungen lokal im Browser. Unterstützte Provider: `gemini`, `anthropic`. Den MCP Bearer Token und die MCP-Endpunkt-URL direkt in den App-Einstellungen (Schlüssel-Icon) hinterlegen – keine Umgebungsvariablen nötig.
-- Optional können die Umgebungsvariablen `VITE_MCP_URL` und `VITE_MCP_PROXY_URL` als vorausgefüllte Standard-URL gesetzt werden. Der hart codierte Fallback ist `https://mcp.atlassian.com/v1/mcp`.
-
-Projektstruktur (Auszug)
-- `src/` — Quellcode (Components, Stores, Services, Composables, Config)
-- `public/` — statische Assets
-- `package.json` — Skripte & Abhängigkeiten. [package.json](package.json#L1)
-- `CONTRIBUTING.md` — Hinweise zur Mitarbeit. [CONTRIBUTING.md](CONTRIBUTING.md#L1)
-
-Weiteres & Mitwirken
-- Fehler, Feature-Requests oder Pull-Requests bitte via GitHub-Repository öffnen (siehe `CONTRIBUTING.md`).
-
-Lizenz
-- In diesem Repository ist keine spezifische Lizenzdatei enthalten; falls gewünscht, bitte eine passende `LICENSE`-Datei ergänzen.
-
-Kontakt
-- Projekt und Dokumentation befinden sich im Repository-Root.
 # RE-Assistant
 
-IREB-orientierter Requirements-Engineering-Assistent mit KI-Unterstützung.
+IREB-orientierter Requirements-Engineering-Assistent mit KI-Unterstützung (Vue 3 + TypeScript + Vite).
 
-Die Anwendung unterstützt jetzt neben AI-Prompts auch eine direkte Jira-/Confluence-Anbindung (Atlassian Cloud). Jira wird entlang von drei klaren RE-Use-Cases genutzt: Übergabe dokumentierter Anforderungen, Review importierter Tickets und RE-Health/Traceability im Management.
+## Kurzüberblick
 
-## Features (Kurzüberblick)
-
-- IREB-Berater-Flow für Ermittlung, Dokumentation, Validierung und Management
-- Tool-Ansichten für Anforderungen, Glossar, Modellierung, Validierung usw.
-- Jira-Übergabe einzelner oder aller Anforderungen aus dem Backlog
-- Jira-Ticket-Review gegen IREB-Qualitätskriterien
-- Jira RE-Health Dashboard für Traceability-Lücken und Review-Kandidaten
-- Confluence-Sync als Projektseite (inkl. Anforderungen, Glossar, Kontext)
-- Optionale MCP-Kontextanreicherung für AI-Prompts
+- Interaktive RE-Werkzeuge für Ermittlung, Dokumentation, Validierung und Management
+- KI-Provider: Gemini und Anthropic
+- Atlassian-Integration für Jira und Confluence
+- Lokaler MCP- und Confluence-Proxy für stabile Entwicklung
 
 ## Voraussetzungen
 
 1. Node.js
-- Empfohlen: `22.12+` (oder `20.19+`)
-- Hinweis: mit `22.11.0` kann `vite` zwar starten, `build` und `test` sind oft instabil.
+- Empfohlen: 22.12+ (oder 20.19+)
 
-2. Atlassian Cloud Zugriff
-- Ein API-Token mit Lese-/Schreibrechten für Jira Cloud und Confluence Cloud
-- Deine Atlassian-Domain, z. B. `firma.atlassian.net`
-- Jira-Projektschlüssel, z. B. `REQ`
-- Optional: Confluence-Space-Key, z. B. `RE`
+2. npm
+- Wird mit Node.js installiert
+
+3. Keine globalen Tools erforderlich
+- Kein globales Vite
+- Kein Docker
+- Keine lokale Datenbank
+
+4. Atlassian Cloud (nur für Jira/Confluence-Features)
+- Atlassian-Domain, z. B. your-company.atlassian.net
+- E-Mail + API-Token
+- Jira-Projektschlüssel, z. B. REQ
+- Optional: Confluence-Space-Key
+
+5. Freie lokale Ports
+- 5173 (Vite)
+- 4000 (MCP-Proxy)
+- 8788 (Confluence-Proxy)
+
+Schnellcheck:
+
+```bash
+node -v
+npm -v
+```
 
 ## Installation
 
@@ -99,181 +46,96 @@ Die Anwendung unterstützt jetzt neben AI-Prompts auch eine direkte Jira-/Conflu
 npm install
 ```
 
-Bei Windows/Node-Kombinationen mit optional-dependency-Problemen kann dieses zusätzliche Paket helfen:
-
-```bash
-npm install -D @rolldown/binding-win32-x64-msvc@1.0.3
-```
-
 ## Lokale Konfiguration
 
-1. `.env.local` anlegen (oder aus `.env.example` ableiten).
-
-2. Atlassian-Domain setzen (wichtig für den lokalen Vite-Proxy):
+1. Datei `.env.local` anlegen (oder aus `.env.example` ableiten)
+2. Optional Domain und Proxy-Defaults setzen:
 
 ```env
 VITE_ATLASSIAN_DOMAIN=your-company.atlassian.net
-```
-
-3. Optional MCP konfigurieren:
-
-```env
 VITE_MCP_PROXY_URL=http://localhost:4000/api/mcp
-# oder
-# VITE_MCP_URL=https://mcp.atlassian.com/v1/mcp
+VITE_CONFLUENCE_PROXY_URL=http://localhost:8788
 ```
 
-## App starten
+Siehe vollständige Variablen in [.env.example](.env.example).
+
+## Lokaler Start
+
+Empfohlen (alles in einem Befehl):
 
 ```bash
+npm run dev:local
+```
+
+Das startet:
+- Vite Dev Server: http://localhost:5173/
+- MCP Proxy: http://localhost:4000
+- Confluence Proxy: http://localhost:8788
+
+Health-Checks:
+- http://localhost:4000/health
+- http://localhost:8788/health
+
+Alternativ getrennt:
+
+```bash
+npm run mcp:proxy
+npm run confluence:proxy
 npm run dev
 ```
 
-Standardmäßig läuft die App dann auf `http://localhost:5173/`.
+## Wichtige Skripte
 
-## Jira-/Confluence-Anbindung einrichten
+- `npm run dev` startet nur den Vite-Devserver
+- `npm run dev:local` startet lokalen Gesamt-Stack
+- `npm run build` führt Typecheck + Production Build aus
+- `npm run lint` führt ESLint aus
+- `npm run test` führt Vitest aus
 
-In der laufenden App:
+## Atlassian in der App konfigurieren
 
-1. Oben auf das Schlüssel-Symbol klicken
-2. In der Auswahl `Atlassian Cloud (Jira + Confluence)` wählen
-3. Felder ausfüllen:
-- Atlassian-Domain (ohne `https://`)
-- E-Mail (Atlassian-Account)
-- API-Token
-- Jira-Projektschlüssel
-- Optional Confluence-Space-Key
-4. `Verbindung testen` ausführen
-5. `Speichern`
+1. In der App auf das Schluessel-Symbol klicken
+2. `Atlassian Cloud (Jira + Confluence)` waehlen
+3. Domain, E-Mail, API-Token und Jira-Projektschluessel eintragen
+4. `Verbindung testen` und danach `Speichern`
 
-Hinweis: Die Zugangsdaten werden lokal im Browser (`localStorage`) gespeichert.
+Hinweis: Zugangsdaten werden lokal im Browser (localStorage) gespeichert.
 
-## Nutzung: Jira
+## Hinweis zu MCP im UI
 
-Die Jira-Anbindung folgt drei Use Cases:
-
-1. **Jira-Übergabe:** Dokumentierte Anforderungen aus dem Backlog als Jira-Issues erstellen.
-2. **Jira-Review:** Bestehende Jira-Tickets in der Validierung auf IREB-Qualität prüfen.
-3. **RE-Health:** Jira im Management auf Traceability-Lücken, Review-Kandidaten und Status prüfen.
-
-### Einzelne Anforderung nach Jira
-
-1. In den Bereich `Management` wechseln
-2. Tool `Backlog, Prio & Jira-Übergabe` öffnen
-3. Bei einer Anforderung auf `Nach Jira übergeben` klicken
-
-Ergebnis:
-- Es wird ein Jira-Issue erzeugt (Issue Type: Story)
-- Der Jira-Key wird am Requirement gespeichert und als Link angezeigt
-
-### Alle Anforderungen nach Jira
-
-1. Gleicher Bereich (`Backlog, Prio & Jira-Übergabe`)
-2. Auf `Jira-Übergabe` klicken
-
-Ergebnis:
-- Alle noch nicht synchronisierten Anforderungen werden erstellt
-- Bereits verknüpfte Anforderungen werden übersprungen
-
-### Jira-Tickets prüfen
-
-1. In den Bereich `Validierung` wechseln
-2. Tool `Jira-Ticket-Review` öffnen
-3. `Jira-Tickets laden` ausführen
-4. Bei relevanten Tickets `Qualität prüfen` klicken
-
-Ergebnis:
-- Die KI prüft Ticket-Titel und Beschreibung gegen IREB-Kriterien
-- Das Ergebnis zeigt Smells, fehlende Informationen, Testbarkeit und Verbesserungsvorschläge
-
-### RE-Health Dashboard
-
-1. In den Bereich `Management` wechseln
-2. Tool `Jira RE-Health Dashboard` öffnen
-3. `RE-Health aktualisieren` ausführen
-
-Ergebnis:
-- Übersicht zu Traceability, Review-Kandidaten, Status, Prioritäten und potenziellen Blockern
-
-## Nutzung: Confluence
-
-1. In `Management` das Tool `Export für KI` öffnen
-2. Auf `Nach Confluence` klicken
-
-Ergebnis:
-- Es wird eine Confluence-Seite erstellt oder aktualisiert (Upsert)
-- Enthalten sind u. a. Vision, Stakeholder, Personas, Anforderungen und Glossar
+Der Eintrag `MCP Atlassian` ist im Konfigurationsdialog aktuell sichtbar, aber deaktiviert (`aktuell nicht genutzt`).
+MCP-Kontext wird weiterhin ueber den lokalen Proxy und die Umgebungsvariablen unterstuetzt.
 
 ## Smoke-Test Checkliste
 
-### 1) Technischer Smoke-Test
+Technisch:
 
 ```bash
 npm run lint
-npm run dev
-```
-
-Optional (mit kompatibler Node-Version):
-
-```bash
 npm run test
 npm run build
 ```
 
-### 2) Funktionaler Smoke-Test (Atlassian)
+Funktional:
 
-1. Atlassian-Konfiguration in der App speichern
-2. `Verbindung testen` muss erfolgreich sein
-3. Eine Beispielanforderung nach Jira pushen
-4. Prüfen, ob Jira-Key in der Backlog-Liste erscheint
-5. Nach Confluence synchronisieren
-6. Prüfen, ob Seite im gewünschten Space erstellt/aktualisiert wurde
+1. App startet unter http://localhost:5173/
+2. Health-Endpunkte beider Proxies liefern 200
+3. Atlassian-Verbindung im Modal erfolgreich
+4. Jira-Uebergabe einer Beispielanforderung funktioniert
+5. Confluence-Sync erstellt oder aktualisiert Seite
 
-## Troubleshooting
+## Sicherheit
 
-### Node-Version zu alt
+- API-Keys und Atlassian-Credentials liegen lokal im Browser
+- Nur auf vertrauenswuerdigen Geraeten verwenden
+- Fuer Produktion ist ein abgesicherter Backend/Proxy-Ansatz empfohlen
 
-Symptom:
-- `Vite requires Node.js version 20.19+ or 22.12+`
+## Projektdateien
 
-Lösung:
-- Node auf mindestens `22.12` (besser `22.13+`) aktualisieren
-
-### Fehlendes Rolldown Native Binding
-
-Symptom:
-- `Cannot find native binding`
-- `Cannot find module @rolldown/binding-win32-x64-msvc`
-
-Lösung:
-
-```bash
-npm install -D @rolldown/binding-win32-x64-msvc@1.0.3
-```
-
-Falls weiterhin Probleme bestehen:
-
-```bash
-rm -r node_modules package-lock.json
-npm install
-```
-
-Unter Windows stattdessen in PowerShell:
-
-```powershell
-Remove-Item -Recurse -Force node_modules
-Remove-Item package-lock.json
-npm install
-```
-
-### 401/403 bei Jira oder Confluence
-
-- Domain, E-Mail und API-Token prüfen
-- Rechte des Tokens im Zielprojekt/Space prüfen
-- Jira-Projektschlüssel und Confluence-Space-Key prüfen
-
-## Sicherheitshinweis
-
-- API-Keys und Atlassian-Credentials werden lokal im Browser gespeichert
-- Für Produktion wird ein eigener Backend-/Proxy-Ansatz empfohlen
-- Keine hochprivilegierten Tokens auf nicht vertrauenswürdigen Geräten verwenden
+- [src/App.vue](src/App.vue)
+- [src/stores/project.ts](src/stores/project.ts)
+- [src/stores/settings.ts](src/stores/settings.ts)
+- [src/services/ai.ts](src/services/ai.ts)
+- [src/services/mcp.ts](src/services/mcp.ts)
+- [package.json](package.json)
+- [CONTRIBUTING.md](CONTRIBUTING.md)

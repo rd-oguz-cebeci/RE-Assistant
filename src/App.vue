@@ -11,11 +11,13 @@ import HomeView from '@/components/HomeView.vue'
 import AdvisorView from '@/components/AdvisorView.vue'
 import ToolView from '@/components/ToolView.vue'
 import ApiModal from '@/components/ApiModal.vue'
+import ConfluenceImportModal from '@/components/ConfluenceImportModal.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
 
 const store = useProjectStore()
 const sidebarOpen = ref(false)
 const apiOpen = ref(false)
+const confluenceOpen = ref(false)
 
 const isHome = computed(() => store.activeView === 'home')
 const activeTool = computed(() => findTool(store.activeView)?.tool ?? null)
@@ -36,6 +38,7 @@ const activeSection = computed(() => menuStructure.find((section) => section.id 
     <div class="flex flex-1 flex-col overflow-hidden">
       <TheHeader
         @toggle-sidebar="sidebarOpen = !sidebarOpen"
+        @open-confluence="confluenceOpen = true"
         @open-api="apiOpen = true"
       />
 
@@ -111,6 +114,7 @@ const activeSection = computed(() => menuStructure.find((section) => section.id 
     </div>
 
     <ApiModal :open="apiOpen" @close="apiOpen = false" />
+    <ConfluenceImportModal :open="confluenceOpen" @close="confluenceOpen = false" />
     <ToastContainer />
   </div>
 </template>

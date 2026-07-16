@@ -3,6 +3,7 @@ import type {
     AdvisorMessage,
     GlobalContext,
     GlossaryEntry,
+    ImportedConfluenceContext,
     Requirement,
 } from '@/types'
 
@@ -24,6 +25,7 @@ interface ProjectState {
     advisorAnswers: Record<string, string>
     advisorCurrentPhase: string
     advisorCompleted: boolean
+    activeConfluenceContext: ImportedConfluenceContext | null
     // Übergreifende Zwischenwerte (überleben Reload)
     tempVision: string
     tempPersonaText: string
@@ -130,6 +132,7 @@ function defaultState(): ProjectState {
         advisorAnswers: {},
         advisorCurrentPhase: 'elicitation',
         advisorCompleted: false,
+        activeConfluenceContext: null,
         confluencePageId: '',
         tempVision: emptyDrafts.tempVision,
         tempPersonaText: emptyDrafts.tempPersonaText,
@@ -171,6 +174,7 @@ export const useProjectStore = defineStore('project', {
                 this.advisorCurrentPhase = p.advisorCurrentPhase ?? 'elicitation'
                 this.advisorCompleted = p.advisorCompleted ?? false
                 this.demoModeLoaded = p.demoModeLoaded ?? false
+                this.activeConfluenceContext = p.activeConfluenceContext ?? null
                 this.confluencePageId = p.confluencePageId ?? ''
 
                 if (isLegacyAutoDemoState(p)) {
@@ -381,6 +385,16 @@ export const useProjectStore = defineStore('project', {
             this.advisorAnswers = {}
             this.advisorCurrentPhase = 'elicitation'
             this.advisorCompleted = false
+            this.save()
+        },
+
+        setConfluenceContext(context: ImportedConfluenceContext) {
+            this.activeConfluenceContext = context
+            this.save()
+        },
+
+        clearConfluenceContext() {
+            this.activeConfluenceContext = null
             this.save()
         },
     },

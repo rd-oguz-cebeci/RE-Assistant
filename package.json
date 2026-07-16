@@ -5,7 +5,10 @@
     "type": "module",
     "description": "IREB RE AI Assistant – KI-gestützter Requirements-Engineering-Assistent",
     "scripts": {
+        "confluence:proxy": "node server/confluence-proxy.mjs",
+        "mcp:proxy": "node server/mcp-proxy.mjs",
         "dev": "vite",
+        "dev:local": "node server/dev-local.mjs",
         "build": "vue-tsc --noEmit && vite build",
         "preview": "vite preview",
         "lint": "eslint . --ext .ts,.vue",

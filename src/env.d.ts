@@ -1,5 +1,9 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+    readonly VITE_CONFLUENCE_PROXY_URL?: string
+}
+
 declare const __APP_VERSION__: string
 
 declare module '*.vue' {

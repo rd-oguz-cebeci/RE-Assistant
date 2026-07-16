@@ -3,6 +3,7 @@ import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables/useToast'
 import { testAtlassianConnection, AtlassianError } from '@/services/atlassian'
+import { testConfluenceConnection } from '@/services/confluence'
 import type { AiProvider } from '@/types'
 import AppIcon from './AppIcon.vue'
 
@@ -12,14 +13,17 @@ const emit = defineEmits<{ close: [] }>()
 const settings = useSettingsStore()
 const { show } = useToast()
 
-type ConfigType = AiProvider | 'mcp' | 'atlassian'
+type ConfigType = AiProvider | 'mcp' | 'atlassian' | 'confluence'
 
 const configType = ref<ConfigType>(settings.provider)
 const credential = ref('')
 const mcpUrl = ref('')
+const confluenceBaseUrl = ref('')
+const confluenceEmail = ref('')
+const confluenceApiToken = ref('')
 const showKey = ref(false)
+const isTesting = ref(false)
 
-// Atlassian multi-field state
 const atlDomain = ref('')
 const atlEmail = ref('')
 const atlToken = ref('')
@@ -39,6 +43,9 @@ watch(
       configType.value = settings.provider
       credential.value = settings.apiKey
       mcpUrl.value = settings.mcpUrl
+      confluenceBaseUrl.value = settings.confluenceBaseUrl
+      confluenceEmail.value = settings.confluenceEmail
+      confluenceApiToken.value = settings.confluenceApiToken
       showKey.value = false
       loadAtlassianFields()
       lastFocused = document.activeElement as HTMLElement | null
@@ -59,6 +66,10 @@ watch(
       mcpUrl.value = settings.mcpUrl
     } else if (newType === 'atlassian') {
       loadAtlassianFields()
+    } else if (newType === 'confluence') {
+      confluenceBaseUrl.value = settings.confluenceBaseUrl
+      confluenceEmail.value = settings.confluenceEmail
+      confluenceApiToken.value = settings.confluenceApiToken
     } else {
       credential.value = settings.apiKey
     }
@@ -79,6 +90,8 @@ const placeholder = computed(() => {
   switch (configType.value) {
     case 'mcp':
       return 'MCP Bearer Token'
+    case 'confluence':
+      return 'Confluence API Token'
     case 'anthropic':
       return 'sk-ant-api03-...'
     case 'gemini':
@@ -88,7 +101,9 @@ const placeholder = computed(() => {
 })
 
 const label = computed(() => {
-  return configType.value === 'mcp' ? 'Bearer Token' : 'API Key'
+  if (configType.value === 'mcp') return 'Bearer Token'
+  if (configType.value === 'confluence') return 'Confluence API Token'
+  return 'API Key'
 })
 
 const description = computed(() => {
@@ -96,18 +111,20 @@ const description = computed(() => {
     return 'Verbinden Sie den RE-Assistenten mit Ihrer Atlassian Cloud. Alle Daten werden lokal im Browser gespeichert.'
   }
   if (configType.value === 'mcp') {
-    return 'Geben Sie Ihren MCP Bearer Token ein. Das Token wird nur lokal im Browser gespeichert.'
+    return 'Optional: MCP Bearer Token eingeben. Wenn ein lokaler MCP-Proxy OAuth übernimmt, kann das Feld leer bleiben.'
+  }
+  if (configType.value === 'confluence') {
+    return 'Pflegen Sie hier die Confluence-Zugangsdaten für den lokalen Import-Proxy.'
   }
   return 'Geben Sie Ihren API Key ein. Der Schlüssel wird nur lokal im Browser gespeichert.'
 })
 
 const hint = computed(() => {
-  if (configType.value === 'mcp' || configType.value === 'atlassian') {
-    return ''
+  if (configType.value === 'mcp' || configType.value === 'atlassian') return ''
+  if (configType.value === 'confluence') {
+    return 'Confluence API Token in Atlassian unter Account Settings > Security > API tokens erstellen'
   }
-  if (configType.value === 'anthropic') {
-    return 'Auf console.anthropic.com erstellen'
-  }
+  if (configType.value === 'anthropic') return 'Auf console.anthropic.com erstellen'
   return 'Kostenlos auf ai.google.dev erstellen'
 })
 
@@ -150,14 +167,32 @@ async function save() {
     return
   }
 
-  const cred = credential.value.trim()
+  if (configType.value === 'confluence') {
+    const baseUrl = confluenceBaseUrl.value.trim()
+    const email = confluenceEmail.value.trim()
+    const apiToken = confluenceApiToken.value.trim()
 
-  if (!cred) {
-    if (configType.value === 'mcp') {
-      show(`Bitte einen Wert für ${label.value} eingeben.`, 'error')
+    if (!baseUrl || !email || !apiToken) {
+      show('Bitte Confluence Base URL, E-Mail und API Token vollständig eintragen.', 'error')
       return
     }
-    // Für Gemini/Anthropic: leere Eingabe erlaubt = Key löschen
+
+    settings.setConfluenceCredentials(baseUrl, email, apiToken)
+    show('Confluence-Zugangsdaten gespeichert.', 'success')
+    close()
+    return
+  }
+
+  const cred = credential.value.trim()
+  if (!cred) {
+    if (configType.value === 'mcp') {
+      settings.setMcpBearerToken('')
+      settings.setMcpUrl(mcpUrl.value)
+      show('MCP-Einstellungen gespeichert (ohne Browser-Token).', 'success')
+      close()
+      return
+    }
+
     settings.setApiCredentials(configType.value as AiProvider, '')
     show('API Key entfernt. Demo-Modus kann jetzt ohne API geladen werden.', 'success')
     close()
@@ -193,7 +228,7 @@ async function saveAtlassian() {
   close()
 }
 
-async function testConnection() {
+async function testAtlassian() {
   const domain = atlDomain.value.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')
   const email = atlEmail.value.trim()
   const token = atlToken.value.trim()
@@ -221,6 +256,37 @@ async function testConnection() {
     atlTesting.value = false
   }
 }
+
+async function runConnectionTest() {
+  if (configType.value !== 'confluence') return
+
+  isTesting.value = true
+  try {
+    const baseUrl = confluenceBaseUrl.value.trim()
+    const email = confluenceEmail.value.trim()
+    const apiToken = confluenceApiToken.value.trim()
+
+    if (!baseUrl || !email || !apiToken) {
+      show('Bitte Confluence Base URL, E-Mail und API Token vollständig eintragen.', 'error')
+      return
+    }
+
+    const result = await testConfluenceConnection(baseUrl, email, apiToken)
+    const userName = result.user?.displayName?.trim() || 'Unbekannter Benutzer'
+    show(`Confluence-Anbindung erfolgreich (${userName}).`, 'success')
+  } catch (error) {
+    let message = 'Anbindungstest fehlgeschlagen.'
+    if (error instanceof Error) {
+      message = error.message
+    }
+    if (message.toLowerCase().includes('not found')) {
+      message = 'Confluence-Test-Endpoint nicht gefunden. Bitte lokalen Confluence-Proxy neu starten.'
+    }
+    show(message, 'error', 7000)
+  } finally {
+    isTesting.value = false
+  }
+}
 </script>
 
 <template>
@@ -230,12 +296,11 @@ async function testConnection() {
     @click.self="close"
     @keydown="onKeydown"
   >
-    <div
+    <dialog
       ref="dialog"
-      role="dialog"
-      aria-modal="true"
+      open
       aria-labelledby="api-modal-title"
-      class="glass-panel w-full max-w-md rounded-2xl p-6 shadow-2xl animate-in sm:p-8"
+      class="api-modal-dialog glass-panel w-full max-w-md rounded-2xl p-6 shadow-2xl animate-in sm:p-8"
     >
       <h3
         id="api-modal-title"
@@ -259,11 +324,11 @@ async function testConnection() {
       >
         <option value="gemini">Google Gemini (gemini-1.5-flash)</option>
         <option value="anthropic">Anthropic Claude (claude-sonnet-4)</option>
-        <option value="mcp">MCP Atlassian</option>
         <option value="atlassian">Atlassian Cloud (Jira + Confluence)</option>
+        <option value="confluence">Confluence Import</option>
+        <option value="mcp" disabled>MCP Atlassian (aktuell nicht genutzt)</option>
       </select>
 
-      <!-- Atlassian Multi-Feld-Formular -->
       <template v-if="configType === 'atlassian'">
         <div class="space-y-4 mb-6">
           <div>
@@ -313,9 +378,7 @@ async function testConnection() {
                 <AppIcon :name="atlShowToken ? 'eye-off' : 'eye'" :size="16" />
               </button>
             </div>
-            <p class="mt-1 text-[11px] text-slate-400">
-              Erstellen unter: id.atlassian.com → Sicherheit → API-Token
-            </p>
+            <p class="mt-1 text-[11px] text-slate-400">Erstellen unter: id.atlassian.com → Sicherheit → API-Token</p>
           </div>
           <div>
             <label class="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -328,9 +391,6 @@ async function testConnection() {
               autocomplete="off"
               class="w-full rounded-xl border border-slate-300 bg-white p-3.5 text-sm uppercase dark:border-slate-600 dark:bg-slate-800"
             />
-            <p class="mt-1 text-[11px] text-slate-400">
-              Kurzname des Jira-Projekts (z. B. REQ, PROJ, SW). Neue Issues werden hier angelegt.
-            </p>
           </div>
           <div>
             <label class="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -343,9 +403,6 @@ async function testConnection() {
               autocomplete="off"
               class="w-full rounded-xl border border-slate-300 bg-white p-3.5 text-sm uppercase dark:border-slate-600 dark:bg-slate-800"
             />
-            <p class="mt-1 text-[11px] text-slate-400">
-              Schlüssel des Confluence-Spaces für die Projektdokumentation (optional).
-            </p>
           </div>
         </div>
 
@@ -353,19 +410,69 @@ async function testConnection() {
           type="button"
           class="mb-4 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-60 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
           :disabled="atlTesting"
-          @click="testConnection"
+          @click="testAtlassian"
         >
           <AppIcon :name="atlTesting ? 'loader-circle' : 'zap'" :size="16" :class="{ 'animate-spin': atlTesting }" />
           {{ atlTesting ? 'Verbindung wird geprüft…' : 'Verbindung testen' }}
         </button>
       </template>
 
-      <!-- Einzel-Credential-Feld (AI / MCP) -->
+      <template v-else-if="configType === 'confluence'">
+        <label for="confluence-base-url" class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          Confluence Base URL
+        </label>
+        <input
+          id="confluence-base-url"
+          v-model="confluenceBaseUrl"
+          type="url"
+          placeholder="https://rewe.atlassian.net"
+          autocomplete="off"
+          spellcheck="false"
+          class="mb-4 w-full rounded-xl border border-slate-300 bg-white p-3.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+          @keydown.enter="save"
+        />
+
+        <label for="confluence-email" class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          Atlassian E-Mail
+        </label>
+        <input
+          id="confluence-email"
+          v-model="confluenceEmail"
+          type="email"
+          placeholder="vorname.nachname@firma.tld"
+          autocomplete="off"
+          spellcheck="false"
+          class="mb-4 w-full rounded-xl border border-slate-300 bg-white p-3.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+          @keydown.enter="save"
+        />
+
+        <label for="confluence-token" class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          Confluence API Token
+        </label>
+        <div class="relative mb-6">
+          <input
+            id="confluence-token"
+            v-model="confluenceApiToken"
+            :type="showKey ? 'text' : 'password'"
+            placeholder="Atlassian API Token"
+            autocomplete="off"
+            spellcheck="false"
+            class="w-full rounded-xl border border-slate-300 bg-white p-3.5 pr-12 text-sm dark:border-slate-600 dark:bg-slate-800"
+            @keydown.enter="save"
+          />
+          <button
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            :aria-label="showKey ? 'Verbergen' : 'Anzeigen'"
+            @click="showKey = !showKey"
+          >
+            <AppIcon :name="showKey ? 'eye-off' : 'eye'" :size="16" />
+          </button>
+        </div>
+      </template>
+
       <template v-else>
-        <label
-          :for="`credential-${configType}`"
-          class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500"
-        >
+        <label :for="`credential-${configType}`" class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
           {{ label }}
         </label>
         <div class="relative mb-6">
@@ -394,17 +501,14 @@ async function testConnection() {
       </template>
 
       <template v-if="configType === 'mcp'">
-        <label
-          for="mcp-url"
-          class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500"
-        >
+        <label for="mcp-url" class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
           MCP-Endpunkt-URL
         </label>
         <input
           id="mcp-url"
           v-model="mcpUrl"
           type="url"
-          placeholder="https://mcp.atlassian.com/v1/mcp"
+          placeholder="http://localhost:4000/api/mcp"
           autocomplete="off"
           spellcheck="false"
           class="mb-6 w-full rounded-xl border border-slate-300 bg-white p-3.5 text-sm dark:border-slate-600 dark:bg-slate-800"
@@ -430,6 +534,14 @@ async function testConnection() {
 
       <div class="flex justify-end gap-3">
         <button
+          v-if="configType === 'confluence'"
+          class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          :disabled="isTesting"
+          @click="runConnectionTest"
+        >
+          {{ isTesting ? 'Teste...' : 'Anbindung testen' }}
+        </button>
+        <button
           class="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           @click="close"
         >
@@ -442,6 +554,19 @@ async function testConnection() {
           Speichern
         </button>
       </div>
-    </div>
+    </dialog>
   </div>
 </template>
+
+<style scoped>
+.api-modal-dialog {
+  margin: 0 auto;
+  border: 0;
+  color: inherit;
+  position: static;
+}
+
+.api-modal-dialog::backdrop {
+  background: transparent;
+}
+</style>

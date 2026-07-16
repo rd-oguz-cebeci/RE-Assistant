@@ -70,3 +70,14 @@ export interface AdvisorMessage {
     role: 'user' | 'assistant'
     text: string
 }
+
+/** Lokal importierter Kontext aus einer Confluence-Seite. */
+export interface ImportedConfluenceContext {
+    sourceType: 'confluence-page'
+    sourceId: string
+    sourceUrl: string
+    title: string
+    spaceKey?: string
+    text: string
+    importedAt: string
+}

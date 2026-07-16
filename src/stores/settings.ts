@@ -5,6 +5,9 @@ const KEY_API = 'gemini_api_key'
 const KEY_PROVIDER = 'api_provider'
 const KEY_MCP_BEARER_TOKEN = 'mcp_bearer_token'
 const KEY_MCP_URL = 'mcp_url'
+const KEY_CONFLUENCE_BASE_URL = 'confluence_base_url'
+const KEY_CONFLUENCE_EMAIL = 'confluence_email'
+const KEY_CONFLUENCE_API_TOKEN = 'confluence_api_token'
 const KEY_THEME = 'theme'
 const KEY_ATLASSIAN = 'atlassian_config'
 
@@ -23,6 +26,9 @@ interface SettingsState {
     provider: AiProvider
     mcpBearerToken: string
     mcpUrl: string
+    confluenceBaseUrl: string
+    confluenceEmail: string
+    confluenceApiToken: string
     isDark: boolean
     atlassianDomain: string
     atlassianEmail: string
@@ -63,6 +69,9 @@ export const useSettingsStore = defineStore('settings', {
             provider: (localStorage.getItem(KEY_PROVIDER) as AiProvider) ?? 'gemini',
             mcpBearerToken: localStorage.getItem(KEY_MCP_BEARER_TOKEN) ?? '',
             mcpUrl: localStorage.getItem(KEY_MCP_URL) ?? resolveDefaultMcpUrl(),
+            confluenceBaseUrl: localStorage.getItem(KEY_CONFLUENCE_BASE_URL) ?? '',
+            confluenceEmail: localStorage.getItem(KEY_CONFLUENCE_EMAIL) ?? '',
+            confluenceApiToken: localStorage.getItem(KEY_CONFLUENCE_API_TOKEN) ?? '',
             isDark: detectInitialTheme(),
             atlassianDomain: atl.domain,
             atlassianEmail: atl.email,
@@ -123,12 +132,40 @@ export const useSettingsStore = defineStore('settings', {
                 confluenceSpace: this.atlassianConfluenceSpace,
             }
             localStorage.setItem(KEY_ATLASSIAN, JSON.stringify(stored))
-            },
+        },
 
         setMcpUrl(url: string) {
             const resolved = url.trim() || resolveDefaultMcpUrl()
             this.mcpUrl = resolved
             localStorage.setItem(KEY_MCP_URL, resolved)
+        },
+
+        setConfluenceCredentials(baseUrl: string, email: string, apiToken: string) {
+            const normalizedBaseUrl = baseUrl.trim().replace(/\/$/, '')
+            const normalizedEmail = email.trim()
+            const normalizedApiToken = apiToken.trim()
+
+            this.confluenceBaseUrl = normalizedBaseUrl
+            this.confluenceEmail = normalizedEmail
+            this.confluenceApiToken = normalizedApiToken
+
+            if (normalizedBaseUrl) {
+                localStorage.setItem(KEY_CONFLUENCE_BASE_URL, normalizedBaseUrl)
+            } else {
+                localStorage.removeItem(KEY_CONFLUENCE_BASE_URL)
+            }
+
+            if (normalizedEmail) {
+                localStorage.setItem(KEY_CONFLUENCE_EMAIL, normalizedEmail)
+            } else {
+                localStorage.removeItem(KEY_CONFLUENCE_EMAIL)
+            }
+
+            if (normalizedApiToken) {
+                localStorage.setItem(KEY_CONFLUENCE_API_TOKEN, normalizedApiToken)
+            } else {
+                localStorage.removeItem(KEY_CONFLUENCE_API_TOKEN)
+            }
         },
 
         applyTheme() {
